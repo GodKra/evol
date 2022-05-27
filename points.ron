@@ -1,0 +1,46 @@
+(
+    r_coords: (0.000, 0.000, 0.000),
+    connections: [
+        (
+            r_coords: (0.000, 20.000, 0.000),
+            connections: [],
+        ),
+        (
+            r_coords: (0.000, 0.000, 20.000),
+            connections: [],
+        ),
+        (
+            r_coords: (20.000, 0.000, 0.000),
+            connections: [],
+        ),
+        (
+            r_coords: (2.828, 2.828, 2.828),
+            connections: [
+                (
+                    r_coords: (0.000, 5.000, 0.000),
+                    connections: [],
+                ),
+                (
+                    r_coords: (0.000, 0.000, 5.000),
+                    connections: [],
+                ),
+                (
+                    r_coords: (0.000, 5.000, 0.000),
+                    connections: [],
+                ),
+                (
+                    r_coords: (8.660, 5.000, 0.000),
+                    connections: [],
+                ),
+                (
+                    r_coords: (3.000, -10.000, 2.000),
+                    connections: [],
+                ),
+            ]
+        ),
+        (
+            r_coords: (-18.660, -5.000, 10.000),
+            connections: [],
+        ),
+    ]
+)

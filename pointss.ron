@@ -1,0 +1,89 @@
+(
+ r_coords: (0, 0, 0),
+ connections: [
+  (
+   r_coords: (1.811, 15.697, -4.138),
+   connections: [
+    (
+     r_coords: (0.754, 4.273, -1.033),
+     connections: [
+      (
+       r_coords: (-1.808, 2.309, -1.634),
+       connections: [
+        (
+         r_coords: (0.438, 2.06, -0.691),
+         connections: [
+          (
+           r_coords: (2.356, 1.676, 0.494),
+           connections: [
+            (
+             r_coords: (2.096, -2.08, 1.208),
+             connections: [],
+            ),
+           ],
+          ),
+         ],
+        ),
+       ],
+      ),
+      (
+       r_coords: (2.563, 1.851, -0.042),
+       connections: [
+        (
+         r_coords: (0.287, 2.461, -0.486),
+         connections: [],
+        ),
+       ],
+      ),
+     ],
+    ),
+    (
+     r_coords: (3.815, -3.103, 9.652),
+     connections: [
+      (
+       r_coords: (2.029, -6.775, 8.461),
+       connections: [],
+      ),
+     ],
+    ),
+    (
+     r_coords: (-6.74, -4.283, -6.805),
+     connections: [
+      (
+       r_coords: (-4.028, -9.617, -7.275),
+       connections: [],
+      ),
+     ],
+    ),
+   ],
+  ),
+  (
+   r_coords: (2.811, -2.095, 3.497),
+   connections: [
+    (
+     r_coords: (4.388, -12.535, 5.289),
+     connections: [
+      (
+       r_coords: (5.382, -8.445, 2.732),
+       connections: [],
+      ),
+     ],
+    ),
+   ],
+  ),
+  (
+   r_coords: (-2.876, -3.426, -1.991),
+   connections: [
+    (
+     r_coords: (-1.871, -18.141, 0.652),
+     connections: [
+      (
+       r_coords: (1.517, -12.178, -0.892),
+       connections: [],
+      ),
+     ],
+    ),
+   ],
+  ),
+ ],
+)
