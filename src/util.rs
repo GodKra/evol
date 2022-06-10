@@ -1,6 +1,67 @@
 use bevy::{prelude::*};
 use bevy_mod_raycast::Ray3d;
 
+use std::hash::Hash;
+
+pub trait Control
+{
+    type I: 'static + Hash + Eq + Sync + Send + Copy;
+
+    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool;
+}
+
+pub enum KeyControls {
+    ESAVE,
+    EDELETE,
+    EROTATE,
+    EGRAB,
+    EEXTRUDE,
+    ESWITCH_MODE,
+    // NONE,
+}
+
+impl KeyControls {
+    pub fn code(&self) -> KeyCode {
+        match self {
+            Self::ESAVE => KeyCode::S,
+            Self::EDELETE => KeyCode::Delete,
+            Self::EROTATE => KeyCode::R,
+            Self::EGRAB => KeyCode::G,
+            Self::EEXTRUDE => KeyCode::E,
+            Self::ESWITCH_MODE => KeyCode::Tab,
+        }
+    }
+}
+
+impl Control for KeyControls {
+    type I = KeyCode;
+    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
+        kbd.just_pressed(self.code())
+    }
+}
+
+
+pub enum MouseControls {
+    EINTERACT,
+}
+
+impl MouseControls {
+    pub fn to_code(&self) -> MouseButton {
+        match self {
+            Self::EINTERACT => MouseButton::Left,
+        }
+    }
+}
+
+
+impl Control for MouseControls {
+    type I = MouseButton;
+    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
+        kbd.just_pressed(self.to_code())
+    }
+}
+
+
 pub fn ray_from_screenspace(
     cursor_pos_screen: Vec2,
     windows: &Windows,

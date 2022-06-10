@@ -4,24 +4,23 @@ use crate::{
     points::*,
 };
 
+use super::selection::JointSelected;
+
 /// System that saves the joint structure to a data file (currently ./points.ron)
 /// 
 /// *active
 pub fn save(
-    input: Res<Input<KeyCode>>,
     transform_q: Query<&GlobalTransform, With<Joint>>,
     root_q: Query<Entity, With<Root>>,
     child_q: Query<&Children, With<Joint>>,
 ) {
-    if !input.just_pressed(KeyCode::S) {
-        return;
-    }
     let root = root_q.single();
 
     let points = Point { 
         connections: make_points(&root, &child_q, &transform_q),
         ..default()
     };
+    println!("saved");
 
     std::fs::write(
         "./points.ron", 
@@ -58,4 +57,30 @@ fn make_points(
         p.push(point);
     }
     p
+}
+
+/// System to handle deletion of joints
+/// 
+/// *active
+pub fn delete_joint(
+    mut commands: Commands,
+    mut joint_selected: ResMut<JointSelected>,
+    joint_q: Query<&Joint>,
+) {
+    if joint_selected.0.is_none() {
+        return;
+    }
+
+    let joint = joint_selected.0.unwrap();
+    let joint_info = joint_q.get(joint).unwrap();
+
+    if let Some(rotator) = joint_info.rotator {
+        commands.entity(rotator).despawn();
+    }
+    if let Some(connector) = joint_info.connector {
+        commands.entity(connector).despawn();
+    }
+    
+    commands.entity(joint).despawn_recursive();
+    joint_selected.0 = None;
 }

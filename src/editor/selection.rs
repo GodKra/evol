@@ -18,12 +18,24 @@ impl Plugin for SelectionPlugin {
             .init_resource::<SelectionUpdated>()
             .init_resource::<SelectionMaterials>()
 
-            .add_stage_after(CoreStage::Update, MANAGE_SELECT_STG, SystemStage::single_threaded())
-            
+            // .add_system_set(
+            //     SystemSet::on_update(crate::AppState::Editor)
+            //         .with_system(
+            //             joint_select
+            //                 .label(JOINT_SELECT)
+            //                 .after(MODE_TOGGLE))
+            // )
             .add_system(
                 joint_select
-                    .label(JOINT_SELECT)
-                    .after(MODE_TOGGLE))
+                .run_in_state(crate::GameState::Editor)
+                .label(JOINT_SELECT)
+                .after(MODE_TOGGLE)
+                .run_if(|input: Res<Input<MouseButton>>| {
+                    MouseControls::EINTERACT.pressed(input)
+                })
+            )
+
+            .add_stage_after(CoreStage::Update, MANAGE_SELECT_STG, SystemStage::single_threaded())
             .add_system_to_stage(
                 MANAGE_SELECT_STG, 
                 update_selection_type
@@ -96,10 +108,10 @@ fn joint_select(
     mouse_input: Res<Input<MouseButton>>,
     pick_cam: Query<&PickingCamera>,
 ) {
-    // click only once
-    if !mouse_input.just_pressed(MouseButton::Left) {
-        return
-    }
+    // // click only once
+    // if !mouse_input.just_pressed(MouseButton::Left) {
+    //     return
+    // }
 
     // this should always work
     let cam = pick_cam.single();
@@ -142,12 +154,41 @@ fn update_selection_type(
     }
 }
 
+/// System to update joint highlight based on its SelectedType
+/// 
+/// passive
+fn highlight_selection(
+    mut selection_updated: ResMut<SelectionUpdated>,
+    select_materials: Res<SelectionMaterials>,
+    joint_materials: Res<JointMaterial>,
+    mut s_query: Query<(&mut Handle<StandardMaterial>, &Selectable)>,
+) {
+    if selection_updated.0 {
+        for (mut material_handle, selectable) in s_query.iter_mut() {
+            if let Some(select_type) = &selectable.selected {
+                match select_type {
+                    SelectedType::Parent => *material_handle = select_materials.parent_color.clone(),
+                    SelectedType::Child => *material_handle = select_materials.child_color.clone(),
+                }
+            } else {
+                *material_handle = joint_materials.joint_color.clone();
+            }
+        }
+        selection_updated.0 = false;
+    }
+}
+
 fn select_joints_recursive(
     joint: &Entity,
     is_parent: bool,
     selectable_query: &mut Query<&mut Selectable>,
     child_query: &Query<&Children>,
 ) {
+    // let mut selectable = if let Ok(selectable) = selectable_query.get_mut(*joint) {
+    //     selectable
+    // } else {
+    //     return;
+    // };
     let mut selectable = selectable_query.get_mut(*joint).unwrap();
     selectable.selected = if is_parent {
         Some(SelectedType::Parent)
@@ -179,28 +220,4 @@ fn get_selectable_children(
         }
     }
     selectable
-}
-
-/// System to update joint highlight based on its SelectedType
-/// 
-/// passive
-fn highlight_selection(
-    mut selection_updated: ResMut<SelectionUpdated>,
-    select_materials: Res<SelectionMaterials>,
-    joint_materials: Res<JointMaterial>,
-    mut s_query: Query<(&mut Handle<StandardMaterial>, &Selectable)>,
-) {
-    if selection_updated.0 {
-        for (mut material_handle, selectable) in s_query.iter_mut() {
-            if let Some(select_type) = &selectable.selected {
-                match select_type {
-                    SelectedType::Parent => *material_handle = select_materials.parent_color.clone(),
-                    SelectedType::Child => *material_handle = select_materials.child_color.clone(),
-                }
-            } else {
-                *material_handle = joint_materials.joint_color.clone();
-            }
-        }
-        selection_updated.0 = false;
-    }
 }
