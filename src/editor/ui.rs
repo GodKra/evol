@@ -1,31 +1,24 @@
 use bevy::prelude::*;
+use iyes_loopless::prelude::*;
 
-use crate::points::*;
+use super::joint::*;
+use crate::{GameState, Editor};
 
 use super::*;
 
 pub struct EditorUiPlugin;
 impl Plugin for EditorUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_enter_system(crate::GameState::Editor, init)
+        app.add_enter_system(GameState::Editor, init)
             .add_system(
                 update_pos_info
-                .run_in_state(crate::GameState::Editor)
+                .run_in_state(GameState::Editor)
                 .after(selection::JOINT_SELECT)
             )
             .add_system(
                 tbutton_interact
-                .run_in_state(crate::GameState::Editor)
+                .run_in_state(GameState::Editor)
             );
-        // app.add_startup_system(init)
-        // .add_system_set(
-        //     SystemSet::on_update(crate::AppState::Editor)
-        //         .with_system(
-        //             update_pos_info
-        //                 .after(selection::JOINT_SELECT)
-        //         )
-        //         .with_system(tbutton_interact)
-        // );
     }
 }
 
@@ -95,7 +88,8 @@ fn init(
                 alignment: Default::default(),
         },
         ..default()
-    }).insert(PosText);
+    }).insert(PosText)
+        .insert(Editor);
 
     // Transition button
     commands
@@ -140,7 +134,7 @@ fn init(
                     });
                 })
                 .insert(TButton);
-        });
+        }).insert(Editor);
 }
 
 
@@ -204,6 +198,7 @@ fn update_pos_info(
 }
 
 fn tbutton_interact(
+    mut commands: Commands,
     mut interaction_query: Query<
         (&Interaction, &mut UiColor),
         (Changed<Interaction>, With<Button>, With<TButton>),
@@ -213,6 +208,8 @@ fn tbutton_interact(
         match *interaction {
             Interaction::Clicked => {
                 *color = PRESSED_BUTTON.into();
+                println!("Switching State to GameState::Observer");
+                commands.insert_resource(NextState(GameState::Observer));
             }
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();

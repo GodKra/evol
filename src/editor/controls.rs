@@ -1,9 +1,6 @@
 use bevy::{prelude::*};
 
-use crate::{
-    points::*,
-};
-use super::{*, Axis};
+use super::{*, joint::*};
 
 /// System to handle editor mode toggle controls and set up the appropriate
 /// resources
@@ -12,7 +9,7 @@ use super::{*, Axis};
 pub fn editor_mode_toggle(
     joint_selected: ResMut<JointSelected>,
     selection_updated: Res<SelectionUpdated>,
-    mut is_adjust_mode: ResMut<IsAdjustMode>,
+    mut is_grab_mode: ResMut<IsGrabMode>,
     mut pos_cache: ResMut<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
     key_input: Res<Input<KeyCode>>,
@@ -47,7 +44,7 @@ pub fn editor_mode_toggle(
                         _ => (),
                     },
                     None => {
-                        is_adjust_mode.0 = true;
+                        is_grab_mode.0 = true;
                         editable.mode = Some(EditMode::RotateFull);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -58,7 +55,7 @@ pub fn editor_mode_toggle(
             KeyCode::G => {
                 match &editable.mode {
                     None => {
-                        is_adjust_mode.0 = true;
+                        is_grab_mode.0 = true;
                         editable.mode = Some(EditMode::GrabFull);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -73,7 +70,7 @@ pub fn editor_mode_toggle(
             KeyCode::E => {
                 match &editable.mode {
                     None => {
-                        is_adjust_mode.0 = true;
+                        is_grab_mode.0 = true;
                         editable.mode = Some(EditMode::GrabExtend);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -93,11 +90,11 @@ pub fn editor_mode_toggle(
 
                         match mode {
                             EditMode::GrabFull | EditMode::GrabAxis(_) => {
-                                editable.mode = Some(EditMode::GrabAxis(Axis::from_key(input).unwrap()))
+                                editable.mode = Some(EditMode::GrabAxis(PosAxis::from_key(input).unwrap()))
                             },
-                            // EditMode::RotateFull | EditMode::RotateAxis(_) => {
-                            //     // editable.mode = Some(EditMode::RotateAxis(Axis::from_key(input).unwrap()))
-                            // }
+                            EditMode::RotateFull | EditMode::RotateAxis(_) => {
+                                editable.mode = Some(EditMode::RotateAxis(PosAxis::from_key(input).unwrap()))
+                            }
                             _ => (),
                         }
                     },
@@ -105,14 +102,14 @@ pub fn editor_mode_toggle(
                 }
             },
             KeyCode::Escape => {
-                if is_adjust_mode.0 {
+                if is_grab_mode.0 {
                     let mut transform = transform_q.get_mut(joint_selected).unwrap();
                     transform.translation = pos_cache.0;
                     let mut point = joint_q.get_mut(joint_selected).unwrap();
                     point.dist = pos_cache.0.length();
                 }
 
-                is_adjust_mode.0 = false;
+                is_grab_mode.0 = false;
                 editable.mode = None
             },
             _ => (),
@@ -124,7 +121,7 @@ pub fn editor_mode_toggle(
         mv_cache.0 = 0.0;
         match &editable.mode {
             Some(_) => {
-                is_adjust_mode.0 = false;
+                is_grab_mode.0 = false;
                 editable.mode = None
             },
             None => (),

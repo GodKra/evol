@@ -4,6 +4,7 @@ pub mod grab;
 pub mod save;
 pub mod selection;
 pub mod ui;
+pub mod joint;
 
 use bevy::{prelude::*};
 use bevy_mod_picking::PickingCameraBundle;
@@ -26,26 +27,26 @@ pub const GRAB_CTRL: &str = "grab_control";
 pub const MODE_TOGGLE: &str = "edit_mode_toggle";
 
 //
-// Data types
+// Assets
 //
 
 #[derive(Debug, PartialEq)]
 pub enum EditMode {
     Cursor,
     GrabFull,    GrabExtend,
-    GrabAxis(Axis),
+    GrabAxis(PosAxis),
     RotateFull,
-    // RotateAxis(Axis),
+    RotateAxis(PosAxis),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Axis {
+pub enum PosAxis {
     X,
     Y,
     Z,
 }
 
-impl Axis {
+impl PosAxis {
     pub fn to_vec(&self) -> Vec3 {
         match self {
             Self::X => Vec3::X,
@@ -65,11 +66,13 @@ impl Axis {
 }
 
 #[derive(Default)]
-pub struct IsAdjustMode(bool);
+pub struct IsGrabMode(bool);
 
+/// Stores the former position of a joint when in Grab mode.
 #[derive(Default)]
 pub struct PositionCache(Vec3);
 
+/// Stores the total movement of a joint when in grab extrude/axis mode.
 #[derive(Default)]
 pub struct MovementCache(f32);
 
@@ -92,39 +95,15 @@ pub struct Editable {
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<IsAdjustMode>()
+        app.init_resource::<IsGrabMode>()
             .init_resource::<PositionCache>()
             .init_resource::<MovementCache>()
             .add_plugin(ui::EditorUiPlugin)
             .add_plugin(selection::SelectionPlugin)
-            // .add_system_set(
-            //     SystemSet::on_update(crate::AppState::Editor)
-            //         .with_system(
-            //             self::grab::grab_control
-            //             .label(GRAB_CTRL)
-            //             .before(JOINT_SELECT))
-            //         .with_system(
-            //             self::cursor::cursor_control
-            //                 .label(CRSR_CTRL)
-            //                 .after(GRAB_CTRL))
-            //         .with_system(
-            //             self::controls::editor_mode_toggle
-            //                 .label(MODE_TOGGLE)
-            //                 .after(CRSR_CTRL)
-            //                 .after(GRAB_CTRL))
-            //         .with_system(
-            //             self::grab::update_connector
-            //                 .after(MODE_TOGGLE))
-                    
-            //         .with_system(
-            //             self::save::save
-            //         )
-            //         .with_system(
-            //             self::delete::delete_joint
-            //         )
-            //         .into()
-            // );
+
             .add_enter_system(crate::GameState::Editor, setup)
+            .add_enter_system(crate::GameState::Editor, joint::generate_mesh)
+
             .add_system(
                 self::grab::grab_control
                 .run_in_state(crate::GameState::Editor)
@@ -160,6 +139,7 @@ impl Plugin for EditorPlugin {
                     KeyControls::EDELETE.pressed(input)
                 })
             );
+            println!("done editor");
     }
 }
 
@@ -181,7 +161,8 @@ fn setup(
         .insert(crate::camera::PanOrbitCamera {
             radius,
             ..Default::default()
-        });
+        })
+        .insert(crate::Editor);
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.3,

@@ -1,7 +1,50 @@
-use bevy::{prelude::*};
+use bevy::{prelude::*, ecs::schedule::IntoSystemDescriptor};
 use bevy_mod_raycast::Ray3d;
 
 use std::hash::Hash;
+
+pub struct JointMaterial {
+    pub joint_color: Handle<StandardMaterial>,
+    pub connector_color: Handle<StandardMaterial>,
+}
+
+impl FromWorld for JointMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
+        JointMaterial {
+            joint_color: materials.add(Color::rgb(0.0, 0.0, 0.0,).into()),
+            connector_color: materials.add(
+                StandardMaterial {
+                    base_color: Color::rgb(0.8, 0.8, 0.8,),
+                    emissive: Color::rgba_linear(0.6, 0.6, 0.6, 0.0),
+                    ..default()
+                }
+            ),
+        }
+    }
+}
+
+pub struct JointMeshes {
+    pub head: Handle<Mesh>,
+    pub connector: Handle<Mesh>,
+}
+
+impl FromWorld for JointMeshes {
+    fn from_world(world: &mut World) -> Self {
+        let mut meshes = world.resource_mut::<Assets<Mesh>>();
+        JointMeshes {
+            head: meshes.add(Mesh::from(shape::Icosphere {
+                radius: 1.,
+                subdivisions: 32,
+            })),
+            connector: meshes.add(Mesh::from(shape::Capsule {
+                depth: 1.5,
+                radius: 0.25,
+                ..Default::default()
+            }))
+        }
+    }
+}
 
 pub trait Control
 {
@@ -40,7 +83,6 @@ impl Control for KeyControls {
     }
 }
 
-
 pub enum MouseControls {
     EINTERACT,
 }
@@ -61,27 +103,26 @@ impl Control for MouseControls {
     }
 }
 
-
+/// [Ray3d]::from_screenspace modified to not require [Res]\<[Windows]\> for 
+/// borrowchecker purposes.
 pub fn ray_from_screenspace(
     cursor_pos_screen: Vec2,
     windows: &Windows,
+    images: &Res<Assets<Image>>,
     camera: &Camera,
     camera_transform: &GlobalTransform,
 ) -> Option<Ray3d> {
     let view = camera_transform.compute_matrix();
-    let windowid = if let bevy::render::camera::RenderTarget::Window(id) = camera.target {
-        id
-    } else {
-        return None;
-    };
-    let window = match windows.get(windowid) {
-        Some(window) => window,
+    let screen_size = match camera.target.get_logical_size(windows, images) {
+        Some(s) => s,
         None => {
-            error!("WindowId {} does not exist", windowid);
+            error!(
+                "Unable to get screen size for RenderTarget {:?}",
+                camera.target
+            );
             return None;
         }
     };
-    let screen_size = Vec2::from([window.width() as f32, window.height() as f32]);
     let projection = camera.projection_matrix;
 
     // 2D Normalized device coordinate cursor position from (-1, -1) to (1, 1)
@@ -90,8 +131,12 @@ pub fn ray_from_screenspace(
     let world_to_ndc = projection * view;
     let is_orthographic = projection.w_axis[3] == 1.0;
 
+    // Calculate the camera's near plane using the projection matrix
+    let projection = projection.to_cols_array_2d();
+    let camera_near = (2.0 * projection[3][2]) / (2.0 * projection[2][2] - 2.0);
+
     // Compute the cursor position at the near plane. The bevy camera looks at -Z.
-    let ndc_near = world_to_ndc.transform_point3(-Vec3::Z * camera.near).z;
+    let ndc_near = world_to_ndc.transform_point3(-Vec3::Z * camera_near).z;
     let cursor_pos_near = ndc_to_world.transform_point3(cursor_ndc.extend(ndc_near));
 
     // Compute the ray's direction depending on the projection used.
@@ -101,4 +146,11 @@ pub fn ray_from_screenspace(
     };
 
     Some(Ray3d::new(cursor_pos_near, ray_direction))
+}
+
+/// Despawn all entities and their children with a given component type
+pub fn despawn_with<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
+    for e in q.iter() {
+        commands.entity(e).despawn_recursive();
+    }
 }

@@ -1,11 +1,9 @@
 use bevy::{prelude::*};
 use bevy_mod_picking::PickingCamera;
+use bevy_mod_raycast::Ray3d;
 
-use crate::{
-    points::*,
-};
-use super::*;
-
+use super::{*, joint::*};
+use crate::util::{JointMaterial, JointMeshes};
 /// System to handle the control of the joint addition cursor
 /// 
 /// *Passive
@@ -15,7 +13,7 @@ pub fn cursor_control(
     mut materials: ResMut<Assets<StandardMaterial>>,
     joint_materials: Res<JointMaterial>,
     joint_meshes: Res<JointMeshes>,
-    mut is_adjust_mode: ResMut<IsAdjustMode>,
+    mut is_grab_mode: ResMut<IsGrabMode>,
     mut selection_updated: ResMut<SelectionUpdated>,
     mouse_input: Res<Input<MouseButton>>,
     mut joint_selected: ResMut<JointSelected>,
@@ -49,7 +47,8 @@ pub fn cursor_control(
                 transform,
                 ..Default::default()
             })
-            .insert(EditCursor::default());
+            .insert(EditCursor::default())
+            .insert(crate::Editor);
         println!("cursor added");
     }
 
@@ -63,9 +62,12 @@ pub fn cursor_control(
         let cam = pick_cam.single();
         if let Some((target, intersection)) = cam.intersect_top() {
             if target == joint {
-                // -- cursor code borrowed from bevy-mod-picking -- 
                 // println!("ignored target: {} \nselected: {}", target.id(), joint.id() );
-                let transform_new = intersection.normal_ray().to_transform();
+                // let transform_new = Mat4::from_rotation_translation(
+                //     Quat::from_rotation_arc(Vec3::Y, intersection.normal()),
+                //      intersection.position()
+                // );
+                let transform_new = Ray3d::new(intersection.position(), intersection.normal()).to_transform();
 
                 for mut transform in cursor_query.iter_mut() {
                     let scale = Vec3::from([
@@ -83,7 +85,7 @@ pub fn cursor_control(
                     visible.is_visible = true;
                 }
 
-                // Create new joint & transfer to adjust mode
+                // Create new joint & transfer to grab mode
                 if mouse_input.just_pressed(MouseButton::Left) {
                     editable.mode = None; // resets editable mode of parent
 
@@ -100,7 +102,7 @@ pub fn cursor_control(
                     
                     joint_selected.0 = Some(joint);
                     selection_updated.0 = true;
-                    is_adjust_mode.0 = true;
+                    is_grab_mode.0 = true;
                 } else {
                     return;
                 }

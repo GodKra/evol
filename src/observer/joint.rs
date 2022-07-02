@@ -1,53 +1,9 @@
 use bevy::{prelude::*};
-use bevy_mod_picking::{PickableMesh};
 use serde::{Serialize, Deserialize};
 
-use crate::{
-    editor::{selection::*, Editable, EditMode}
-};
+use bevy_rapier3d::prelude::*;
 
-pub struct JointMaterial {
-    pub joint_color: Handle<StandardMaterial>,
-    pub connector_color: Handle<StandardMaterial>,
-}
-
-impl FromWorld for JointMaterial {
-    fn from_world(world: &mut World) -> Self {
-        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
-        JointMaterial {
-            joint_color: materials.add(Color::rgb(0.0, 0.0, 0.0,).into()),
-            connector_color: materials.add(
-                StandardMaterial {
-                    base_color: Color::rgb(0.8, 0.8, 0.8,),
-                    emissive: Color::rgba_linear(0.6, 0.6, 0.6, 0.0),
-                    ..default()
-                }
-            ),
-        }
-    }
-}
-
-pub struct JointMeshes {
-    pub head: Handle<Mesh>,
-    pub connector: Handle<Mesh>,
-}
-
-impl FromWorld for JointMeshes {
-    fn from_world(world: &mut World) -> Self {
-        let mut meshes = world.resource_mut::<Assets<Mesh>>();
-        JointMeshes {
-            head: meshes.add(Mesh::from(shape::Icosphere {
-                radius: 1.,
-                subdivisions: 32,
-            })),
-            connector: meshes.add(Mesh::from(shape::Capsule {
-                depth: 1.5,
-                radius: 0.25,
-                ..Default::default()
-            }))
-        }
-    }
-}
+use crate::util::{JointMaterial, JointMeshes};
 
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -56,9 +12,9 @@ pub struct Point {
     pub connections: Vec<Point>,
 }
 
+/// Physical manifestation of the Point struct.
 #[derive(Clone, Debug, Default, Component)]
 pub struct Joint {
-    pub dist: f32,
     pub parent: Option<Entity>,
     pub rotator: Option<Entity>,
     pub connector: Option<Entity>,   
@@ -74,17 +30,19 @@ impl Point {
         meshes: &Res<JointMeshes>,
         materials: &Res<JointMaterial>,
         parent: Option<Entity>,
+        global_pos: Vec3,
     ) {
+        let pos = Vec3::new(self.r_coords.0, self.r_coords.1, self.r_coords.2);
         let joint = create_joint(
             parent, 
-            Vec3::new(self.r_coords.0, self.r_coords.1, self.r_coords.2), 
-            None,
+            global_pos,
+            pos, 
             commands, 
             meshes, 
             materials
         );
         for connection in &mut self.connections {
-            connection.create_object(commands, meshes.clone(), materials, Some(joint));
+            connection.create_object(commands, meshes.clone(), materials, Some(joint), global_pos+pos);
         }
     }
 }
@@ -99,16 +57,15 @@ pub fn generate_mesh(
     let mut points: Point = ron::de::from_bytes(point_data).unwrap_or_default();
     println!("{:?}", points);
     
-    points.create_object(&mut commands, &meshes, &materials, None);
+    points.create_object(&mut commands, &meshes, &materials, None, Vec3::ZERO);
 }
 
-/// Creates a joint parented to the given entity (free floating if none) with the given
-/// relative position (in global coordinate space). Joint will be initialized with the
-/// given edit_mode if any.
+/// Creates a joint with the given relative position from the given global position. A spherical joint is created
+/// between the joint and its parent.
 pub fn create_joint(
     mut parent: Option<Entity>,
+    global_pos: Vec3,
     position: Vec3,
-    edit_mode: Option<EditMode>,
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
@@ -119,14 +76,18 @@ pub fn create_joint(
         parent = Some(commands.spawn_bundle(PbrBundle {
                 mesh: meshes.head.clone(),
                 material: materials.joint_color.clone(),
-                transform: Transform::from_translation(position),
+                transform: Transform::from_translation(global_pos+position),
                 ..Default::default()
             })
-            .insert(PickableMesh::default())
             //.insert(BoundVol::default())
-            .insert(Selectable::default())
-            .insert(Editable::default())
             .insert(Root)
+            .insert(RigidBody::Dynamic)
+            .insert(Collider::ball(1.0))
+            .insert(Friction::coefficient(3.0))
+            // .insert(Restitution::coefficient(1.0))
+            // .insert(Friction::coefficient(3.0))
+            // .insert(LockedAxes::TRANSLATION_LOCKED)
+            .insert(crate::Observer) // Only the root needs this marker (change in future?)
             .insert(joint)
             .id());
     } else {
@@ -137,7 +98,7 @@ pub fn create_joint(
         let rotator = Some(commands.spawn_bundle(PbrBundle {
             transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, Vec3::default())),
             ..Default::default()
-        })
+        }).insert(crate::Observer)
           .with_children(|p| {
             // connector
             let scale = Vec3::from([1.0, len/2.0, 1.0]);
@@ -151,26 +112,62 @@ pub fn create_joint(
                 ..Default::default()
             }).id());
         }).id());
-        joint.dist = len;
         joint.parent = parent;
         joint.rotator = rotator;
+
+        let s_joint = SphericalJointBuilder::new()
+            .local_anchor1(Vec3::ZERO)
+            .local_anchor2(-position);
 
         let current = commands.spawn_bundle(PbrBundle {
             mesh: meshes.head.clone(),
             material: materials.joint_color.clone(),
-            transform: Transform::from_translation(position),
+            transform: Transform::from_translation(global_pos+position),
             ..Default::default()
         })
-        .insert(PickableMesh::default())
         //.insert(BoundVol::default())
-        .insert(Selectable::default())
-        .insert(Editable{ mode: edit_mode })
         .insert(joint)
+        .insert(RigidBody::Dynamic)
+        .insert(Collider::ball(1.0))
+        .insert(ImpulseJoint::new(parent.unwrap(), s_joint))
+        .insert(Friction::coefficient(3.0))
+        // .insert(Restitution::coefficient(1.0))
+        .insert(crate::Observer)
         // .push_children(&[rotator.unwrap()])
         .id();
 
-        commands.entity(parent.unwrap()).push_children(&[current, rotator.unwrap()]);
+        // commands.entity(parent.unwrap()).push_children(&[rotator.unwrap()]);
         parent = Some(current);
     }
     parent.unwrap()
+}
+
+/// Automatically updates the visual connector between the joints.
+pub fn update_connector(
+    changed_joints: Query<(&Joint, Entity)>,
+    mut transform_q: Query<&mut Transform>,
+) {
+    for (joint, entity) in changed_joints.iter() {
+        let transform = transform_q.get(entity).unwrap().clone();
+        // println!("REEE");
+        if joint.rotator.is_none() {
+            continue;
+        }
+
+        let parent_t = transform_q.get(joint.parent.unwrap()).unwrap().clone();
+        
+        let mut rotator = transform_q.get_mut(joint.rotator.unwrap()).unwrap();
+        rotator.translation = parent_t.translation;
+        
+        let j_to_p = transform.translation-parent_t.translation;
+
+        rotator.rotation = Quat::from_rotation_arc(Vec3::Y, j_to_p.normalize());
+        
+        let mut connector = transform_q.get_mut(joint.connector.unwrap()).unwrap();
+
+        let scale = Vec3::from([1.0, j_to_p.length()/2.0, 1.0]);
+        let rotation = Quat::default();
+        let translation = Vec3::new(0.0, j_to_p.length()/2.0, 0.0);
+        *connector = Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation));
+    }
 }

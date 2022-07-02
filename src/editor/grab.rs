@@ -1,9 +1,8 @@
 use bevy::{prelude::*, input::{mouse::MouseMotion}};
 use crate::{
-    points::*,
     util::*,
 };
-use super::*;
+use super::{*, joint::*};
 
 /// System to handle the movement of the joints when in Grab/Rotate edit modes.
 /// 
@@ -14,7 +13,7 @@ pub fn grab_control(
     mut motion_evr: EventReader<MouseMotion>,
     images: Res<Assets<Image>>,
     mut windows: ResMut<Windows>,
-    is_adjust_mode: Res<IsAdjustMode>,
+    is_grab_mode: Res<IsGrabMode>,
     joint_selected: Res<JointSelected>,
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
@@ -24,7 +23,7 @@ pub fn grab_control(
     mut transform_query: Query<&mut Transform>,
     global_query: Query<&mut GlobalTransform, Without<Camera>>,
 ) {
-    if !is_adjust_mode.0 || joint_selected.0.is_none() {
+    if !is_grab_mode.0 || joint_selected.0.is_none() {
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
         let window = windows.get_primary_mut().unwrap();
@@ -107,6 +106,7 @@ pub fn grab_control(
             let ray = ray_from_screenspace(
                 mouse_pos, 
                 &windows, 
+                &images,
                 cam, 
                 cam_transform
             ).unwrap();
@@ -211,6 +211,7 @@ pub fn grab_control(
         //     let ray = ray_from_screenspace(
         //         mouse_pos, 
         //         &windows, 
+        //         &images,
         //         cam, 
         //         cam_transform
         //     ).unwrap();
@@ -227,39 +228,8 @@ pub fn grab_control(
         //     // p + a * (j-p).dot(a)
         //     let p_transform = global_query.get(parent).unwrap();
         //     let j_transform = global_query.get(joint).unwrap();
-        //     let mid = p_transform.translation + axis.to_vec() * (pos_cache.0 - p_transform.translation).dot(axis.to_vec());
-        //     // let p_pos = cam.world_to_screen(&windows, cam_transform, mid);
-        //     // let s_pos = cam.world_to_screen(&windows, cam_transform, j_transform.translation);
-        //     // if p_pos.is_none() || s_pos.is_none() {
-        //     //     return;
-        //     // }
-        //     let a = axis.to_vec();
-        //     let b = pos_cache.0-ray.origin();
-        //     let c = ray.direction();
-        //     // length of c at which b - c is orthogonal to a, just (Cos0 = A / H) in vectors
-        //     let len = (a.dot(b)/a.length()) / (a.dot(c)/(a.length()*c.length()));
-        //     // println!("meet {:?} at {:?}", a, len);
-
-        //     let dir_vec = (ray.origin() + (ray.direction() * len)) - p_transform.translation;
-        //     let dir_vec = axis.to_vec().cross(dir_vec.cross(axis.to_vec())) + mid;
-
-        //     // let proj_p = axis.to_vec().cross(pos_cache.0-p_transform.translation.cross(axis.to_vec()));
             
-        //     // let angle = if proj_p.cross(dir_vec).normalize() == axis.to_vec() {
-        //     //     proj_p.angle_between(dir_vec)
-        //     // } else {
-        //     //     -proj_p.angle_between(dir_vec)
-        //     // };
-
-        //     // let mouse_move = Vec2::new(mouse_move.x, -mouse_move.y); // mouse_move.y seems to be inverted
-        //     // let mv = mouse_move.dot(Vec2::new(dir_vec.y, -dir_vec.x)); // ortho dir_vec
-
-        //     let mut transform = transform_query.get_mut(joint).unwrap();
-
-        //     let rotation = Quat::from_rotation_arc(pos_cache.0.normalize(), dir_vec.normalize());
-        //     // let rotation = Quat::from_axis_angle(axis.to_vec(), angle);
-
-        //     transform.translation = rotation * pos_cache.0;
+            
         // },
         _ => (),
     }

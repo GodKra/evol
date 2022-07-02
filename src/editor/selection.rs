@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mod_picking::*;
 
-use crate::points::JointMaterial;
+use crate::util::{JointMaterial};
 
 use super::*;
 
@@ -18,13 +18,6 @@ impl Plugin for SelectionPlugin {
             .init_resource::<SelectionUpdated>()
             .init_resource::<SelectionMaterials>()
 
-            // .add_system_set(
-            //     SystemSet::on_update(crate::AppState::Editor)
-            //         .with_system(
-            //             joint_select
-            //                 .label(JOINT_SELECT)
-            //                 .after(MODE_TOGGLE))
-            // )
             .add_system(
                 joint_select
                 .run_in_state(crate::GameState::Editor)
@@ -39,10 +32,12 @@ impl Plugin for SelectionPlugin {
             .add_system_to_stage(
                 MANAGE_SELECT_STG, 
                 update_selection_type
+                    .run_in_state(crate::GameState::Editor)
                     .label(S_TYPE_UPDATE))
             .add_system_to_stage(
                 MANAGE_SELECT_STG, 
                 highlight_selection
+                    .run_in_state(crate::GameState::Editor)
                     .label(S_HIGHLIGHT)
                     .after(S_TYPE_UPDATE))
             ;
@@ -105,14 +100,8 @@ pub struct SelectionUpdated(pub bool);
 fn joint_select(
     mut joint_selected: ResMut<JointSelected>,
     mut selection_updated: ResMut<SelectionUpdated>,
-    mouse_input: Res<Input<MouseButton>>,
     pick_cam: Query<&PickingCamera>,
 ) {
-    // // click only once
-    // if !mouse_input.just_pressed(MouseButton::Left) {
-    //     return
-    // }
-
     // this should always work
     let cam = pick_cam.single();
     
@@ -213,10 +202,7 @@ fn get_selectable_children(
         for child in children.iter() {
             if selectable_query.get(*child).is_ok() {
                 selectable.push(*child);
-            }// else { // used when joints were parented to rotator and rotator to parent
-            //     let mut c = get_selectable_children(child, selectable_query, child_query);
-            //     selectable.append(&mut c);
-            // }
+            }
         }
     }
     selectable

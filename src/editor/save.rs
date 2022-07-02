@@ -1,11 +1,6 @@
 use bevy::{prelude::*};
 
-use crate::{
-    points::*,
-};
-
-use super::selection::JointSelected;
-
+use super::{selection::JointSelected, joint::*};
 /// System that saves the joint structure to a data file (currently ./points.ron)
 /// 
 /// *active

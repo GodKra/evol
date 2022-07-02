@@ -1,5 +1,6 @@
 // Borrowed from https://erasin.wang/books/bevy-cheatbook/cookbook/pan-orbit-camera.html
 use bevy::{prelude::*, input::mouse::*, render::camera::PerspectiveProjection};
+use iyes_loopless::prelude::*;
 
 use crate::editor::selection::JointSelected;
 
@@ -8,7 +9,8 @@ pub struct PanOrbitCameraPlugin;
 impl Plugin for PanOrbitCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_system(pan_orbit_camera)
-            .add_system(focus_selected);
+            .add_system(focus_selected.run_in_state(crate::GameState::Editor))
+            .add_system(limit_radius.run_in_state(crate::GameState::Observer));
     }
 }
 
@@ -131,6 +133,14 @@ fn focus_selected(
     cam.focus = transform.translation;
     // cam.radius = 10.0;
     cam_transform.translation = cam.focus + cam_transform.rotation.mul_vec3(Vec3::new(0.0, 0.0, cam.radius));
+}
+
+fn limit_radius(
+    mut cam_q: Query<&mut PanOrbitCamera>
+) {
+    let mut cam = cam_q.single_mut();
+    cam.radius = cam.radius.min(500.);
+
 }
 
 fn get_primary_window_size(windows: &Res<Windows>) -> Vec2 {
