@@ -90,7 +90,7 @@ pub struct Selectable {
 #[derive(Default, Debug)]
 pub struct JointSelected(pub Option<Entity>);
 
-/// Set to true if any changes need to be made to the selection
+/// Set to true if any changes are to be made to the selection
 #[derive(Default)]
 pub struct SelectionUpdated(pub bool);
 

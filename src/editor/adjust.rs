@@ -7,13 +7,13 @@ use super::{*, joint::*};
 /// System to handle the movement of the joints when in Grab/Rotate edit modes.
 /// 
 /// *passive
-pub fn grab_control(
+pub fn adjust_control(
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     mut motion_evr: EventReader<MouseMotion>,
     images: Res<Assets<Image>>,
     mut windows: ResMut<Windows>,
-    is_grab_mode: Res<IsGrabMode>,
+    is_adjust_mode: Res<IsAdjustMode>,
     joint_selected: Res<JointSelected>,
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
@@ -23,7 +23,7 @@ pub fn grab_control(
     mut transform_query: Query<&mut Transform>,
     global_query: Query<&mut GlobalTransform, Without<Camera>>,
 ) {
-    if !is_grab_mode.0 || joint_selected.0.is_none() {
+    if !is_adjust_mode.0 || joint_selected.0.is_none() {
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
         let window = windows.get_primary_mut().unwrap();
@@ -130,7 +130,7 @@ pub fn grab_control(
             let b = ray.direction().dot(rot_to_ray);
             let c = rot_to_ray.dot(rot_to_ray) - radius * radius;
             // rotation is spherical when within radius
-            let len = if b*b - c >= 0. && editable.mode.as_ref().unwrap() != &EditMode::GrabFull {
+            let len = if b*b - c >= 0.0 && editable.mode.as_ref().unwrap() != &EditMode::GrabFull {
                 let root = (b*b-c).sqrt();
                 if joint_to_ray.dot(rot_to_ray.normalize()) < rot_to_ray.length() {
                     // joint is facing camera
@@ -200,37 +200,46 @@ pub fn grab_control(
             window.set_cursor_visibility(false);
             window.set_cursor_position(s_pos.unwrap());
         },
-        // EditMode::RotateAxis(axis) => {
-        //     let cursor = windows.get_primary().unwrap().cursor_position();
-        //     let mouse_pos = if cursor.is_some() {
-        //         cursor.unwrap()
-        //     } else {
-        //         return
-        //     };
+        EditMode::RotateAxis(axis) => {
+            let cursor = windows.get_primary().unwrap().cursor_position();
+            let mouse_pos = if cursor.is_some() {
+                cursor.unwrap()
+            } else {
+                return
+            };
             
-        //     let ray = ray_from_screenspace(
-        //         mouse_pos, 
-        //         &windows, 
-        //         &images,
-        //         cam, 
-        //         cam_transform
-        //     ).unwrap();
+            let ray = ray_from_screenspace(
+                mouse_pos, 
+                &windows, 
+                &images,
+                cam, 
+                cam_transform
+            ).unwrap();
 
-        //     let point = joint_query.get_mut(joint).unwrap();
+            let point = joint_query.get_mut(joint).unwrap();
             
-        //     if point.parent.is_none() {
-        //         editable.mode = Some(EditMode::GrabFull);
-        //         return;
-        //     }
+            if point.parent.is_none() {
+                editable.mode = Some(EditMode::GrabFull);
+                return;
+            }
+            
+            let parent = point.parent.unwrap();
+            
+            let p_transform = global_query.get(parent).unwrap();
+            let j_transform = global_query.get(joint).unwrap();
+            
+            let j = j_transform.translation;
+            let p = p_transform.translation;
 
-        //     let parent = point.parent.unwrap();
-            
-        //     // p + a * (j-p).dot(a)
-        //     let p_transform = global_query.get(parent).unwrap();
-        //     let j_transform = global_query.get(joint).unwrap();
-            
-            
-        // },
+            let center = p + axis.to_vec() * (j-p).dot(axis.to_vec());
+            let intersection = get_intersect_plane_ray(center, axis.to_vec(), ray);
+            let dir_vec = intersection - center;
+
+            let rot = get_axis_rotation(j-center, dir_vec, axis.to_vec());
+
+            let mut joint_local = transform_query.get_mut(joint).unwrap();
+            joint_local.translation = rot * joint_local.translation;
+        },
         _ => (),
     }
 }

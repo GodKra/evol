@@ -1,10 +1,11 @@
+pub mod dof;
 pub mod controls;
 pub mod cursor;
-pub mod grab;
+pub mod adjust;
+pub mod joint;
 pub mod save;
 pub mod selection;
 pub mod ui;
-pub mod joint;
 
 use bevy::{prelude::*};
 use bevy_mod_picking::PickingCameraBundle;
@@ -14,8 +15,8 @@ use crate::util::*;
 use self::selection::*;
 
 /* EDITOR SYSTEM ORDER
-UPDATE STAGE: grab_ctrl -> crsr_ctrl -> mode_toggle -> joint_select -> update_pos_info
-                                                    -> update_connector
+UPDATE STAGE: grab_ctrl -> crsr_ctrl -> mode_toggle -> joint_select     ->  update_pos_info
+                        <- set_dof ->                  update_connector     pointer_visibility, position_pointer
             save, delete_joint
      \/
 MANAGE_SELECT STAGE: selection_type_update -> selection_highlight
@@ -37,6 +38,7 @@ pub enum EditMode {
     GrabAxis(PosAxis),
     RotateFull,
     RotateAxis(PosAxis),
+    AOF,
 }
 
 #[derive(Debug, PartialEq)]
@@ -66,7 +68,7 @@ impl PosAxis {
 }
 
 #[derive(Default)]
-pub struct IsGrabMode(bool);
+pub struct IsAdjustMode(bool);
 
 /// Stores the former position of a joint when in Grab mode.
 #[derive(Default)]
@@ -75,6 +77,9 @@ pub struct PositionCache(Vec3);
 /// Stores the total movement of a joint when in grab extrude/axis mode.
 #[derive(Default)]
 pub struct MovementCache(f32);
+
+#[derive(Default)]
+pub struct NoDeselect(bool);
 
 //
 // Components
@@ -95,7 +100,7 @@ pub struct Editable {
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<IsGrabMode>()
+        app.init_resource::<IsAdjustMode>()
             .init_resource::<PositionCache>()
             .init_resource::<MovementCache>()
             .add_plugin(ui::EditorUiPlugin)
@@ -105,7 +110,7 @@ impl Plugin for EditorPlugin {
             .add_enter_system(crate::GameState::Editor, joint::generate_mesh)
 
             .add_system(
-                self::grab::grab_control
+                self::adjust::adjust_control
                 .run_in_state(crate::GameState::Editor)
                 .label(GRAB_CTRL)
                 .before(JOINT_SELECT))
@@ -121,7 +126,7 @@ impl Plugin for EditorPlugin {
                     .after(CRSR_CTRL)
                     .after(GRAB_CTRL))
             .add_system(
-                self::grab::update_connector
+                self::adjust::update_connector
                     .run_in_state(crate::GameState::Editor)
                     .after(MODE_TOGGLE))
             
@@ -138,17 +143,43 @@ impl Plugin for EditorPlugin {
                 .run_if(|input: Res<Input<KeyCode>>| {
                     KeyControls::EDELETE.pressed(input)
                 })
-            );
+            )
+            .add_system(
+                self::dof::set_dof
+                .run_in_state(crate::GameState::Editor)
+                .before(MODE_TOGGLE)
+            )
+            .add_system(
+                self::dof::pointer_visibility
+                .run_in_state(crate::GameState::Editor)
+                .after(JOINT_SELECT)
+            )
+            .add_system(
+                self::dof::position_pointer
+                .run_in_state(crate::GameState::Editor)
+                .after(JOINT_SELECT)
+            )
+            ;
             println!("done editor");
     }
 }
 
 fn setup(
     mut commands: Commands,
+    // 
+    // mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Camera
     let translation = Vec3::new(0.0, 0.0, 10.0);
     let radius = translation.length();
+
+    // 
+
+    // commands.spawn_bundle(PbrBundle {
+    //     mesh: arrow_handle.clone(),
+    //     material: materials.add(Color::rgb(0., 0.2, 0.2).into()),
+    //     ..default()
+    // });
 
     // let mut camera = OrthographicCameraBundle::new_3d();
     // camera.orthographic_projection.scale = 3.0;

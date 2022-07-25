@@ -9,7 +9,7 @@ use super::{*, joint::*};
 pub fn editor_mode_toggle(
     joint_selected: ResMut<JointSelected>,
     selection_updated: Res<SelectionUpdated>,
-    mut is_grab_mode: ResMut<IsGrabMode>,
+    mut is_adjust_mode: ResMut<IsAdjustMode>,
     mut pos_cache: ResMut<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
     key_input: Res<Input<KeyCode>>,
@@ -44,7 +44,7 @@ pub fn editor_mode_toggle(
                         _ => (),
                     },
                     None => {
-                        is_grab_mode.0 = true;
+                        is_adjust_mode.0 = true;
                         editable.mode = Some(EditMode::RotateFull);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -55,7 +55,7 @@ pub fn editor_mode_toggle(
             KeyCode::G => {
                 match &editable.mode {
                     None => {
-                        is_grab_mode.0 = true;
+                        is_adjust_mode.0 = true;
                         editable.mode = Some(EditMode::GrabFull);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -70,7 +70,7 @@ pub fn editor_mode_toggle(
             KeyCode::E => {
                 match &editable.mode {
                     None => {
-                        is_grab_mode.0 = true;
+                        is_adjust_mode.0 = true;
                         editable.mode = Some(EditMode::GrabExtend);
 
                         let transform = transform_q.get(joint_selected).unwrap();
@@ -80,6 +80,14 @@ pub fn editor_mode_toggle(
                     _ => (),
                 }
             },
+            KeyCode::F => {
+                match &editable.mode {
+                    None => {
+                        editable.mode = Some(EditMode::AOF);
+                    },
+                    _ => (),
+                }
+            }
             KeyCode::X | KeyCode::Y | KeyCode::Z => {
                 match &editable.mode {
                     Some(mode) => {
@@ -102,27 +110,27 @@ pub fn editor_mode_toggle(
                 }
             },
             KeyCode::Escape => {
-                if is_grab_mode.0 {
+                if is_adjust_mode.0 {
                     let mut transform = transform_q.get_mut(joint_selected).unwrap();
                     transform.translation = pos_cache.0;
                     let mut point = joint_q.get_mut(joint_selected).unwrap();
                     point.dist = pos_cache.0.length();
                 }
 
-                is_grab_mode.0 = false;
+                is_adjust_mode.0 = false;
                 editable.mode = None
             },
             _ => (),
         }
     }
 
-    if mouse_btn.just_pressed(MouseButton::Left) { // reset positioncache
+    if mouse_btn.just_pressed(MouseButton::Left) {
         pos_cache.0 = Vec3::default();
         mv_cache.0 = 0.0;
         match &editable.mode {
             Some(_) => {
-                is_grab_mode.0 = false;
-                editable.mode = None
+                is_adjust_mode.0 = false;
+                editable.mode = None;
             },
             None => (),
         }

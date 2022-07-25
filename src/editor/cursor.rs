@@ -13,7 +13,7 @@ pub fn cursor_control(
     mut materials: ResMut<Assets<StandardMaterial>>,
     joint_materials: Res<JointMaterial>,
     joint_meshes: Res<JointMeshes>,
-    mut is_grab_mode: ResMut<IsGrabMode>,
+    mut is_grab_mode: ResMut<IsAdjustMode>,
     mut selection_updated: ResMut<SelectionUpdated>,
     mouse_input: Res<Input<MouseButton>>,
     mut joint_selected: ResMut<JointSelected>,
@@ -44,11 +44,13 @@ pub fn cursor_control(
         commands.spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: cube_size })),
             material: cursor_material.clone(),
-                transform,
-                ..Default::default()
-            })
-            .insert(EditCursor::default())
-            .insert(crate::Editor);
+            transform,
+            visibility: Visibility { is_visible: false },
+            ..Default::default()
+            
+        })
+        .insert(EditCursor::default())
+        .insert(crate::Editor);
         println!("cursor added");
     }
 
@@ -93,7 +95,8 @@ pub fn cursor_control(
 
                     let joint = create_joint(
                         Some(target), 
-                        intersection.normal() * len, 
+                        intersection.normal() * len,
+                        Vec3::ZERO,
                         Some(EditMode::GrabExtend),
                         &mut commands, 
                         &joint_meshes, 

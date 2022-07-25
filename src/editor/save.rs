@@ -8,11 +8,12 @@ pub fn save(
     transform_q: Query<&GlobalTransform, With<Joint>>,
     root_q: Query<Entity, With<Root>>,
     child_q: Query<&Children, With<Joint>>,
+    joint_q: Query<&Joint>,
 ) {
     let root = root_q.single();
 
     let points = Point { 
-        connections: make_points(&root, &child_q, &transform_q),
+        connections: make_points(&root, &child_q, &transform_q, &joint_q),
         ..default()
     };
     println!("saved");
@@ -31,6 +32,7 @@ fn make_points(
     parent: &Entity, 
     child_q: &Query<&Children, With<Joint>>, 
     transform_q: &Query<&GlobalTransform, With<Joint>>,
+    joint_q: &Query<&Joint>,
 ) -> Vec<Point> {
     let mut p = Vec::new();
 
@@ -45,10 +47,16 @@ fn make_points(
             Ok(t) => t,
             Err(_) => continue,
         };
+        let s_joint = joint_q.get(*joint).unwrap();
         let dir = s_transform.translation - p_transform.translation;
         let dir = (dir * 1000.0).round() / 1000.0; // 3 d.p to make it cleaner
         point.r_coords = (dir.x, dir.y, dir.z);
-        point.connections = make_points(joint, child_q, transform_q);
+        point.dof = if s_joint.locked {
+                s_joint.dof.into()
+            } else {
+                Vec3::ZERO.into()
+            };
+        point.connections = make_points(joint, child_q, transform_q, joint_q);
         p.push(point);
     }
     p
