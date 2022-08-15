@@ -42,13 +42,13 @@ fn make_points(
     }
     for joint in children.unwrap().iter() {
         let mut point = Point::default();
-        let p_transform = transform_q.get(*parent).unwrap(); // always a joint
+        let p_transform = transform_q.get(*parent).unwrap().translation(); // always a joint
         let s_transform = match transform_q.get(*joint) { // ignore rotator
-            Ok(t) => t,
+            Ok(t) => t.translation(),
             Err(_) => continue,
         };
         let s_joint = joint_q.get(*joint).unwrap();
-        let dir = s_transform.translation - p_transform.translation;
+        let dir = s_transform - p_transform;
         let dir = (dir * 1000.0).round() / 1000.0; // 3 d.p to make it cleaner
         point.r_coords = (dir.x, dir.y, dir.z);
         point.dof = if s_joint.locked {

@@ -37,13 +37,12 @@ fn init(
     asset_server: Res<AssetServer>,
 ) {
     // Position information text
-    commands.spawn_bundle(UiCameraBundle::default());
     let font = asset_server.load("fonts/FiraCode-Regular.ttf");
     commands.spawn_bundle(TextBundle {
         style: Style {
             align_self: AlignSelf::FlexEnd,
             position_type: PositionType::Absolute,
-            position: Rect {
+            position: UiRect {
                 top: Val::Px(5.0),
                 left: Val::Px(5.0),
                 ..default()
@@ -108,7 +107,7 @@ fn init(
                 .spawn_bundle(ButtonBundle {
                     style: Style {
                         size: Size::new(Val::Px(80.0), Val::Px(30.0)),
-                        margin: Rect {
+                        margin: UiRect {
                             top: Val::Px(5.),
                             ..default()
                         },
@@ -121,14 +120,13 @@ fn init(
                 })
                 .with_children(|parent| {
                     parent.spawn_bundle(TextBundle {
-                        text: Text::with_section(
+                        text: Text::from_section(
                             "Test",
                             TextStyle {
                                 font: asset_server.load("fonts/FiraCode-Regular.ttf"),
                                 font_size: 15.0,
                                 color: Color::rgb(0.9, 0.9, 0.9),
                             },
-                            Default::default(),
                         ),
                         ..default()
                     });
@@ -156,6 +154,7 @@ fn update_pos_info(
                 return;
             }
             let (joint, ltransform, gtransform, editable) = jq.unwrap();
+            let gtranslation = gtransform.translation();
 
             if let Some(mode) = editable.mode.as_ref() {
                  match mode {
@@ -178,7 +177,7 @@ fn update_pos_info(
 
             text.sections[0].value = format!(
                 "Global  X: {:.3} | Y: {:.3} | Z: {:.3}",
-                gtransform.translation.x, gtransform.translation.y, gtransform.translation.z
+                gtranslation.x, gtranslation.y, gtranslation.z
             );
             text.sections[1].value = format!(
                 // Global -

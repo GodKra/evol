@@ -1,4 +1,5 @@
 use bevy::{prelude::*, input::{mouse::MouseMotion}};
+use bevy_mod_raycast::Ray3d;
 use crate::{
     util::*,
 };
@@ -17,7 +18,7 @@ pub fn adjust_control(
     joint_selected: Res<JointSelected>,
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
-    cam_query: Query<(&Camera, &GlobalTransform), With<PerspectiveProjection>>,
+    cam_query: Query<(&Camera, &GlobalTransform)>,
     mut editable_query: Query<&mut Editable>,
     mut joint_query: Query<&mut Joint>,
     mut transform_query: Query<&mut Transform>,
@@ -58,10 +59,10 @@ pub fn adjust_control(
 
             let parent = point.parent.unwrap();
             
-            let p_transform = global_query.get(parent).unwrap();
-            let j_transform = global_query.get(joint).unwrap();
-            let p_pos = cam.world_to_screen(&windows, &images, cam_transform, p_transform.translation);
-            let s_pos = cam.world_to_screen(&windows, &images, cam_transform, j_transform.translation);
+            let p_transform = global_query.get(parent).unwrap().translation();
+            let j_transform = global_query.get(joint).unwrap().translation();
+            let p_pos = cam.world_to_viewport(cam_transform, p_transform);
+            let s_pos = cam.world_to_viewport(cam_transform, j_transform);
             if p_pos.is_none() || s_pos.is_none() {
                 return;
             }
@@ -103,10 +104,8 @@ pub fn adjust_control(
                 return
             };
             
-            let ray = ray_from_screenspace(
-                mouse_pos, 
-                &windows, 
-                &images,
+            let ray = Ray3d::from_screenspace(
+                mouse_pos,
                 cam, 
                 cam_transform
             ).unwrap();
@@ -120,8 +119,8 @@ pub fn adjust_control(
                 joint
             };
 
-            let parent_global = global_query.get(parent).unwrap().translation;
-            let joint_global = global_query.get(joint).unwrap().translation;
+            let parent_global = global_query.get(parent).unwrap().translation();
+            let joint_global = global_query.get(joint).unwrap().translation();
             
             // https://antongerdelan.net/opengl/raycasting.html
             let radius = (joint_global-parent_global).length();
@@ -171,9 +170,9 @@ pub fn adjust_control(
                 return;
             }
 
-            let j_transform = global_query.get(joint).unwrap();
-            let p_pos = cam.world_to_screen(&windows, &images, cam_transform, j_transform.translation + axis.to_vec());
-            let s_pos = cam.world_to_screen(&windows, &images, cam_transform, j_transform.translation);
+            let j_transform = global_query.get(joint).unwrap().translation();
+            let p_pos = cam.world_to_viewport(cam_transform, j_transform + axis.to_vec());
+            let s_pos = cam.world_to_viewport(cam_transform, j_transform);
             if p_pos.is_none() || s_pos.is_none() {
                 return;
             }
@@ -208,10 +207,8 @@ pub fn adjust_control(
                 return
             };
             
-            let ray = ray_from_screenspace(
-                mouse_pos, 
-                &windows, 
-                &images,
+            let ray = Ray3d::from_screenspace(
+                mouse_pos,
                 cam, 
                 cam_transform
             ).unwrap();
@@ -228,8 +225,8 @@ pub fn adjust_control(
             let p_transform = global_query.get(parent).unwrap();
             let j_transform = global_query.get(joint).unwrap();
             
-            let j = j_transform.translation;
-            let p = p_transform.translation;
+            let p = p_transform.translation();
+            let j = j_transform.translation();
 
             let center = p + axis.to_vec() * (j-p).dot(axis.to_vec());
             let intersection = get_intersect_plane_ray(center, axis.to_vec(), ray);

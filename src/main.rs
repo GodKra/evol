@@ -72,7 +72,7 @@ fn test(
                 .spawn_bundle(ButtonBundle {
                     style: Style {
                         size: Size::new(Val::Px(80.0), Val::Px(30.0)),
-                        margin: Rect {
+                        margin: UiRect {
                             top: Val::Px(5.),
                             ..default()
                         },
@@ -85,14 +85,13 @@ fn test(
                 })
                 .with_children(|parent| {
                     parent.spawn_bundle(TextBundle {
-                        text: Text::with_section(
+                        text: Text::from_section(
                             "GO",
                             TextStyle {
                                 font: asset_server.load("fonts/FiraCode-Regular.ttf"),
                                 font_size: 15.0,
                                 color: Color::rgb(0.9, 0.9, 0.9),
                             },
-                            Default::default(),
                         ),
                         ..default()
                     });

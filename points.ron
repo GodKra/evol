@@ -3,16 +3,16 @@
  dof: (0, 0, 0),
  connections: [
   (
-   r_coords: (5, 5, 5),
-   dof: (0.87481236, -1.3627001, 0.48788857),
+   r_coords: (0, 0, 5),
+   dof: (0, 0, 0),
    connections: [
     (
-     r_coords: (4.919, 0.848, 3.918),
+     r_coords: (5, 0, 0),
      dof: (0, 0, 0),
      connections: [
       (
-       r_coords: (5.093, -0.748, 6.688),
-       dof: (0.8595759, -0.44647077, -0.70451254),
+       r_coords: (5, 0, 0),
+       dof: (0, 0, 0),
        connections: [],
       ),
      ],

@@ -184,7 +184,7 @@ fn setup(
     // let mut camera = OrthographicCameraBundle::new_3d();
     // camera.orthographic_projection.scale = 3.0;
     // camera.transform = Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y);
-    commands.spawn_bundle(PerspectiveCameraBundle {
+    commands.spawn_bundle(Camera3dBundle {
         transform: Transform::from_translation(translation)
         .looking_at(Vec3::ZERO, Vec3::Y),
         ..Default::default()

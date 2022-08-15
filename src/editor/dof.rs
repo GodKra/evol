@@ -15,14 +15,13 @@ pub struct DOFPointer;
 /// 
 /// * Passive
 pub fn set_dof(
-    images: Res<Assets<Image>>,
     windows: Res<Windows>,
     meshes: Res<JointMeshes>,
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     joint_selected: ResMut<JointSelected>,
     mut mesh_q: Query<&mut Handle<Mesh>, With<DOFPointer>>,
-    cam_query: Query<(&Camera, &GlobalTransform), With<PerspectiveProjection>>,
+    cam_query: Query<(&Camera, &GlobalTransform)>,
     mut editable_q: Query<&mut Editable>,
     gtransform_q: Query<&GlobalTransform>,
     mut pointer_q: Query<&mut Transform, With<DOFPointer>>,
@@ -42,6 +41,9 @@ pub fn set_dof(
 
     if let Some(EditMode::AOF) = editable.mode {
         let mut jointdata = joint_q.get_mut(joint).unwrap();
+        if jointdata.dof_pointer.is_none() {
+            return;
+        }
 
         if key_input.just_pressed(KeyCode::F) {
             let mut mesh_handle = mesh_q.get_mut(jointdata.dof_pointer.unwrap()).unwrap();
@@ -63,18 +65,16 @@ pub fn set_dof(
             return
         };
         
-        let ray = ray_from_screenspace(
-            mouse_pos, 
-            &windows, 
-            &images,
+        let ray = Ray3d::from_screenspace(
+            mouse_pos,
             cam, 
             cam_transform
         ).unwrap();
 
         let normal = (pointer_t.rotation * Vec3::Y).normalize();
-        let joint_t = gtransform_q.get(joint).unwrap();
+        let joint_t = gtransform_q.get(joint).unwrap().translation();
 
-        let local_ray = Ray3d::new(ray.origin()-joint_t.translation, ray.direction()); // ray in joint's local space
+        let local_ray = Ray3d::new(ray.origin()-joint_t, ray.direction()); // ray in joint's local space
         
         let intersection = get_intersect_plane_ray(
             pointer_t.translation, 
@@ -112,25 +112,39 @@ pub fn position_pointer(
         } else {
             return;
         }
+        let jointdata = joint_q.get(joint).unwrap();
+        if jointdata.dof_pointer.is_none() {
+            return;
+        }
 
         // let mut pointer_t = pointer_q.single_mut();
-        let jointdata = joint_q.get(joint).unwrap();
         let mut pointer_t = pointer_q.get_mut(jointdata.dof_pointer.unwrap()).unwrap();
-        let rotator_t = transform_q.get(jointdata.rotator.unwrap()).unwrap();
-        pointer_t.translation = rotator_t.rotation * Vec3::new(0., DOF_DISTANCE, 0.);
+        let r_rot = transform_q.get(jointdata.rotator.unwrap()).unwrap().to_scale_rotation_translation().1;
+        // let gtransform = transform_q.get(jointdata.dof_pointer.unwrap()).unwrap();
         
-        let normal = rotator_t.rotation * Vec3::Y;
+        let normal = r_rot * Vec3::Y;
         // theoretical twist nullfication -- doesnt work
         // let normal_ortho = normal.any_orthonormal_vector();
-        // let normal_rot = rotator_t.rotation * normal_ortho;
+        // let normal_rot = r_rot * normal_ortho;
         // let normal_proj = normal.cross(normal_rot.cross(normal));
         // let anti_rot = get_axis_rotation(normal_proj, normal_ortho, normal);
         // let anti_rot = Quat::from_axis_angle(normal, 2.14);
         
-        let pointer_dir = rotator_t.rotation * Vec3::Z;
-        let rot = get_axis_rotation(pointer_dir, jointdata.dof, normal);
+        let pointer_dir = r_rot * Vec3::Z;
+        // let forward = r_rot * Vec3::Z;
+        // let right = jointdata.dof.cross(forward).normalize();
+        // let up = forward.cross(right);
+        // pointer_t.rotation = Quat::from_mat3(&Mat3::from_cols(right, up, forward));
+        let forward = pointer_dir.normalize();
+        let right = normal.cross(forward).normalize();
+        let up = forward.cross(right);
+        pointer_t.rotation = Quat::from_mat3(&Mat3::from_cols(right, up, forward));
+        pointer_t.translation = r_rot * Vec3::new(0., DOF_DISTANCE, 0.);
+        // pointer_t.rotation = rotator_t.rotation;
+        // *pointer_t = pointer_t.looking_at(jointdata.dof, rotator_t.translation + pointer_t.translation * jointdata.dist);
+        // let rot = get_axis_rotation(pointer_dir, jointdata.dof, normal);
         // pointer_t.rotation = rot * anti_rot * rotator_t.rotation;
-        pointer_t.rotation = rot *  rotator_t.rotation;
+        // pointer_t.rotation = rot *  rotator_t.rotation;
     }
 }
 
@@ -149,8 +163,10 @@ pub fn pointer_visibility(
     if let Some(joint) = joint_selected.0 {
         let joint = joint_q.get(joint);
         if let Ok(joint) = joint {
-            let mut selected_pointer = pointer_q.get_mut(joint.dof_pointer.unwrap()).unwrap();
-            selected_pointer.is_visible = true;
+            if joint.dof_pointer.is_some() {
+                let mut selected_pointer = pointer_q.get_mut(joint.dof_pointer.unwrap()).unwrap();
+                selected_pointer.is_visible = true;
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-use bevy::{prelude::*};
+use bevy::{prelude::*, math::Affine3A};
 use bevy_mod_picking::PickingCamera;
 use bevy_mod_raycast::Ray3d;
 
@@ -81,7 +81,7 @@ pub fn cursor_control(
                     let translation = Vec3::new(0.0, (cube_size * cube_tail_scale * (intersection.distance()/2.0)) / 2.0, 0.0);
                     let transform_move =
                         Mat4::from_scale_rotation_translation(scale, rotation, translation);
-                    *transform = GlobalTransform::from_matrix(transform_new * transform_move)
+                    *transform = Affine3A::from_mat4(transform_new * transform_move).into()
                 }
                 for mut visible in &mut visibility_query.iter_mut() {
                     visible.is_visible = true;

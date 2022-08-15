@@ -1,5 +1,5 @@
 // Borrowed from https://erasin.wang/books/bevy-cheatbook/cookbook/pan-orbit-camera.html
-use bevy::{prelude::*, input::mouse::*, render::camera::PerspectiveProjection};
+use bevy::{prelude::*, input::mouse::*, render::camera::Projection};
 use iyes_loopless::prelude::*;
 
 use crate::editor::selection::JointSelected;
@@ -19,6 +19,7 @@ impl Plugin for PanOrbitCameraPlugin {
 pub struct PanOrbitCamera {
     /// The "focus point" to orbit around. It is automatically updated when panning the camera
     pub focus: Vec3,
+    
     pub radius: f32,
     pub upside_down: bool,
 }
@@ -40,7 +41,7 @@ fn pan_orbit_camera(
     mut ev_motion: EventReader<MouseMotion>,
     mut ev_scroll: EventReader<MouseWheel>,
     input_mouse: Res<Input<MouseButton>>,
-    mut query: Query<(&mut PanOrbitCamera, &mut Transform, &PerspectiveProjection)>,
+    mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
 ) {
     // change input mapping for orbit and panning here
     let orbit_button = MouseButton::Middle;
@@ -93,7 +94,9 @@ fn pan_orbit_camera(
             any = true;
             // make panning distance independent of resolution and FOV,
             let window = get_primary_window_size(&windows);
-            pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window;
+            if let Projection::Perspective(projection) = projection {
+                pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window;
+            }
             // translate by local axes
             let right = transform.rotation * Vec3::X * -pan.x;
             let up = transform.rotation * Vec3::Y * pan.y;
@@ -130,7 +133,7 @@ fn focus_selected(
     let joint = joint_selected.0.unwrap();
     let (mut cam, mut cam_transform) = cam_query.single_mut();
     let transform = global_query.get(joint).unwrap();
-    cam.focus = transform.translation;
+    cam.focus = transform.translation();
     // cam.radius = 10.0;
     cam_transform.translation = cam.focus + cam_transform.rotation.mul_vec3(Vec3::new(0.0, 0.0, cam.radius));
 }
