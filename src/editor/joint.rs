@@ -13,7 +13,7 @@ use super::dof::*;
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Point {
     pub r_coords: (f32, f32, f32),
-    pub dof: (f32, f32, f32), // Degrees of freedom -- If zero then free
+    pub dof: f32, // Angle describing which direction the joint can move-- If zero then free
     pub connections: Vec<Point>,
 }
 
@@ -21,7 +21,7 @@ pub struct Point {
 #[derive(Clone, Debug, Default, Component)]
 pub struct Joint {
     pub dist: f32,
-    pub dof: Vec3,
+    pub dof: f32,
     pub locked: bool,
     pub parent: Option<Entity>,
     pub rotator: Option<Entity>,
@@ -30,9 +30,9 @@ pub struct Joint {
 }
 
 impl Joint {
-    pub fn with_dof(dof: Vec3) -> Self {
-        if dof == Vec3::ZERO {
-            Joint { dof: Vec3::Y, ..default() } // not locked
+    pub fn with_dof(dof: f32) -> Self {
+        if dof == 0.0 {
+            Joint { dof, locked: false, ..default() }
         } else {
             Joint { dof, locked: true, ..default() }
         }
@@ -53,7 +53,7 @@ impl Point {
         let joint = create_joint(
             parent, 
             Vec3::new(self.r_coords.0, self.r_coords.1, self.r_coords.2), 
-            Vec3::from(self.dof),
+            self.dof,
             None,
             commands, 
             meshes, 
@@ -84,7 +84,7 @@ pub fn generate_mesh(
 pub fn create_joint(
     mut parent: Option<Entity>,
     position: Vec3,
-    dof: Vec3,
+    dof: f32,
     edit_mode: Option<EditMode>,
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
@@ -135,7 +135,11 @@ pub fn create_joint(
         let dof_transform = Transform::from_translation(Vec3::new(0.0, 0.0, 0.0))
             .with_scale(Vec3::new(DOF_SCALE, DOF_SCALE, DOF_SCALE));
         let pointer = commands.spawn_bundle(PbrBundle {
-            mesh: if joint.locked { meshes.dof_locked.clone() } else { meshes.dof_free.clone() } ,
+            mesh: if joint.locked { 
+                    meshes.dof_locked.clone() 
+                } else {
+                    meshes.dof_free.clone() 
+                },
             material: materials.dof_color.clone(),
             transform: dof_transform,
             visibility: Visibility { is_visible: false },

@@ -47,12 +47,12 @@ pub fn set_dof(
 
         if key_input.just_pressed(KeyCode::F) {
             let mut mesh_handle = mesh_q.get_mut(jointdata.dof_pointer.unwrap()).unwrap();
-            if jointdata.locked {
-                *mesh_handle = meshes.dof_free.clone();
-            } else {
-                *mesh_handle = meshes.dof_locked.clone();
-            }
             jointdata.locked = !jointdata.locked;
+            if jointdata.locked {
+                *mesh_handle = meshes.dof_locked.clone();
+            } else {
+                *mesh_handle = meshes.dof_free.clone();
+            }
         }
 
         let mut pointer_t = pointer_q.get_mut(jointdata.dof_pointer.unwrap()).unwrap();
@@ -85,13 +85,20 @@ pub fn set_dof(
         let dir_vec = intersection - pointer_t.translation;
         let pointer_dir = pointer_t.rotation * Vec3::Z;
 
+        let local_y = if normal.y != 0.0 {
+            let len = normal.length_squared()/normal.y;
+            (Vec3::Y*len - normal).normalize()
+        } else {
+            Vec3::Y
+        };
+
         let rot = get_axis_rotation(pointer_dir, dir_vec, normal);
         pointer_t.rotation = rot * pointer_t.rotation;
 
         if mouse_input.just_pressed(MouseButton::Left) {
-            println!("here");
             editable.mode = None;
-            jointdata.dof = dir_vec;
+            jointdata.dof = get_rotation_angle(local_y, pointer_t.rotation * Vec3::Z, normal);
+            println!("dof: {:?}", jointdata.dof);
         }           
     }
 }
@@ -122,29 +129,34 @@ pub fn position_pointer(
         let r_rot = transform_q.get(jointdata.rotator.unwrap()).unwrap().to_scale_rotation_translation().1;
         // let gtransform = transform_q.get(jointdata.dof_pointer.unwrap()).unwrap();
         
+        // let normal = r_rot * Vec3::Y;
+
+        // old
+        // let y_side = normal.project_onto(Vec3::Y);
+        // let side = normal - y_side;
+        // let angle = (y_side.length()/normal.length()).acos();
+        // let len = angle.tan() * side.length();
+
+        // let pointer_dir = if normal.y > 0.0 {
+        //     (normal - (y_side + Vec3::Y * len)).normalize()
+        // } else {
+        //     (normal - (y_side - Vec3::Y * len)).normalize()
+        // };
+
         let normal = r_rot * Vec3::Y;
-        // theoretical twist nullfication -- doesnt work
-        // let normal_ortho = normal.any_orthonormal_vector();
-        // let normal_rot = r_rot * normal_ortho;
-        // let normal_proj = normal.cross(normal_rot.cross(normal));
-        // let anti_rot = get_axis_rotation(normal_proj, normal_ortho, normal);
-        // let anti_rot = Quat::from_axis_angle(normal, 2.14);
-        
-        let pointer_dir = r_rot * Vec3::Z;
-        // let forward = r_rot * Vec3::Z;
-        // let right = jointdata.dof.cross(forward).normalize();
-        // let up = forward.cross(right);
-        // pointer_t.rotation = Quat::from_mat3(&Mat3::from_cols(right, up, forward));
+        let local_y = if normal.y != 0.0 {
+            let len = normal.length_squared()/normal.y;
+            (Vec3::Y*len - normal).normalize()
+        } else {
+            Vec3::Y
+        };
+
+        let pointer_dir = Quat::from_axis_angle(normal, jointdata.dof) * local_y; 
+
         let forward = pointer_dir.normalize();
         let right = normal.cross(forward).normalize();
-        let up = forward.cross(right);
-        pointer_t.rotation = Quat::from_mat3(&Mat3::from_cols(right, up, forward));
+        pointer_t.rotation = Quat::from_mat3(&Mat3::from_cols(right, normal, forward));
         pointer_t.translation = r_rot * Vec3::new(0., DOF_DISTANCE, 0.);
-        // pointer_t.rotation = rotator_t.rotation;
-        // *pointer_t = pointer_t.looking_at(jointdata.dof, rotator_t.translation + pointer_t.translation * jointdata.dist);
-        // let rot = get_axis_rotation(pointer_dir, jointdata.dof, normal);
-        // pointer_t.rotation = rot * anti_rot * rotator_t.rotation;
-        // pointer_t.rotation = rot *  rotator_t.rotation;
     }
 }
 

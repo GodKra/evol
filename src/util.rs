@@ -39,7 +39,7 @@ pub struct JointMeshes {
 
 impl FromWorld for JointMeshes {
     fn from_world(world: &mut World) -> Self {
-        let (dof_locked, dof_free): (Handle<Mesh>, Handle<Mesh>) = {
+        let (dof_free, dof_locked): (Handle<Mesh>, Handle<Mesh>) = {
             let asset_server = world.resource::<AssetServer>();
             (
                 asset_server.load("models/dof_pointer.glb#Mesh0/Primitive0"),
@@ -136,12 +136,18 @@ pub fn get_intersect_plane_ray(plane_pos: Vec3, plane_normal: Vec3, ray: Ray3d) 
 /// 
 /// `src` and `dest` has to be orthogonal to the `axis`.
 pub fn get_axis_rotation(src: Vec3, dest: Vec3, axis: Vec3) -> Quat {
+    Quat::from_axis_angle(axis, get_rotation_angle(src, dest, axis))
+}
+
+/// Returns the angle needed for `src` to rotate around the `axis` to reach `dest`.
+/// 
+/// `src` and `dest` has to be orthogonal to the `axis`.
+pub fn get_rotation_angle(src: Vec3, dest: Vec3, axis: Vec3) -> f32 {
     let angle = src.angle_between(dest);
     let cross = src.cross(dest);
-    let rotation = if cross.dot(axis) > 0.0 {
+    if cross.dot(axis) > 0.0 {
         angle
     } else {
         std::f32::consts::TAU-angle
-    };
-    Quat::from_axis_angle(axis, rotation)
+    }
 }

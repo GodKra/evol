@@ -54,7 +54,7 @@ fn make_points(
         point.dof = if s_joint.locked {
                 s_joint.dof.into()
             } else {
-                Vec3::ZERO.into()
+                0.0
             };
         point.connections = make_points(joint, child_q, transform_q, joint_q);
         p.push(point);

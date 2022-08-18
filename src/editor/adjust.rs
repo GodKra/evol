@@ -12,7 +12,6 @@ pub fn adjust_control(
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     mut motion_evr: EventReader<MouseMotion>,
-    images: Res<Assets<Image>>,
     mut windows: ResMut<Windows>,
     is_adjust_mode: Res<IsAdjustMode>,
     joint_selected: Res<JointSelected>,

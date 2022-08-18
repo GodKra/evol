@@ -96,7 +96,7 @@ pub fn cursor_control(
                     let joint = create_joint(
                         Some(target), 
                         intersection.normal() * len,
-                        Vec3::ZERO,
+                        0.0,
                         Some(EditMode::GrabExtend),
                         &mut commands, 
                         &joint_meshes, 
