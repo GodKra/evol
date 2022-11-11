@@ -13,10 +13,12 @@ pub fn cursor_control(
     mut materials: ResMut<Assets<StandardMaterial>>,
     joint_materials: Res<JointMaterial>,
     joint_meshes: Res<JointMeshes>,
+    mut id_counter: ResMut<IDCounter>,
+    mut id_map: ResMut<IDMap>,
     mut is_grab_mode: ResMut<IsAdjustMode>,
     mut selection_updated: ResMut<SelectionUpdated>,
     mouse_input: Res<Input<MouseButton>>,
-    mut joint_selected: ResMut<JointSelected>,
+    mut entity_selected: ResMut<EntitySelected>,
     added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
     pick_cam: Query<&PickingCamera>,
     mut editable_query: Query<&mut Editable>,
@@ -51,13 +53,13 @@ pub fn cursor_control(
         })
         .insert(EditCursor::default())
         .insert(crate::Editor);
-        println!("cursor added");
+        println!("** Cursor Added");
     }
 
-    if joint_selected.0.is_none() {
+    if !entity_selected.is_joint() {
         return;
     }
-    let joint = joint_selected.0.unwrap();
+    let joint = entity_selected.get().unwrap();
     let mut editable = editable_query.get_mut(joint).unwrap();
 
     if let Some(EditMode::Cursor) = editable.mode {
@@ -93,17 +95,19 @@ pub fn cursor_control(
 
                     let len = 2.0; // default extension
 
-                    let joint = create_joint(
+                    let new_joint = create_joint(
                         Some(target), 
                         intersection.normal() * len,
-                        0.0,
                         Some(EditMode::GrabExtend),
                         &mut commands, 
                         &joint_meshes, 
-                        &joint_materials
+                        &joint_materials,
+                        &mut id_map,
+                        &mut id_counter,
                     );
                     
-                    joint_selected.0 = Some(joint);
+                    entity_selected.set(Some(SelectableEntity::Joint(new_joint)));
+                    println!("** Created joint {:?}", new_joint);
                     selection_updated.0 = true;
                     is_grab_mode.0 = true;
                 } else {

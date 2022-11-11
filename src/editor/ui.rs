@@ -140,13 +140,13 @@ fn init(
 /// 
 /// *passive
 fn update_pos_info(
-    joint_selected: Res<JointSelected>,
+    entity_selected: Res<EntitySelected>,
     pos_cache: Res<PositionCache>,
     jointq: Query<(&Joint, &Transform, &GlobalTransform, &Editable)>,
     mut textq: Query<&mut Text, With<PosText>>,
 ) {
     let mut text = textq.single_mut();
-    match joint_selected.0 {
+    match entity_selected.get() {
         Some(joint) => {
             let jq = jointq.get(joint);
             if jq.is_err() {

@@ -7,7 +7,7 @@ use super::{*, joint::*};
 /// 
 /// *active
 pub fn editor_mode_toggle(
-    joint_selected: ResMut<JointSelected>,
+    entity_selected: Res<EntitySelected>,
     selection_updated: Res<SelectionUpdated>,
     mut is_adjust_mode: ResMut<IsAdjustMode>,
     mut pos_cache: ResMut<PositionCache>,
@@ -18,11 +18,11 @@ pub fn editor_mode_toggle(
     mut editable_q: Query<&mut Editable>,
     mut transform_q: Query<&mut Transform>,
 ) {
-    if joint_selected.0.is_none() || selection_updated.0 {
+    if selection_updated.0 || !entity_selected.is_joint() {
         return;
     }
 
-    let joint_selected = joint_selected.0.unwrap();
+    let joint_selected = entity_selected.get().unwrap();
     let mut editable = editable_q.get_mut(joint_selected).unwrap();
 
     let key_inputs = key_input.get_just_pressed();

@@ -6,7 +6,7 @@ use std::hash::Hash;
 pub struct JointMaterial {
     pub joint_color: Handle<StandardMaterial>,
     pub connector_color: Handle<StandardMaterial>,
-    pub dof_color: Handle<StandardMaterial>,
+    pub muscle_color: Handle<StandardMaterial>,
 }
 
 impl FromWorld for JointMaterial {
@@ -21,8 +21,8 @@ impl FromWorld for JointMaterial {
                     ..default()
                 }
             ),
-            dof_color: materials.add(StandardMaterial {
-                base_color: Color::rgb(0.0, 1.0, 0.0),
+            muscle_color: materials.add(StandardMaterial {
+                base_color: Color::rgb(1.0, 0.0, 0.0),
                 unlit: true,
                 ..Default::default()
             }),
@@ -33,19 +33,20 @@ impl FromWorld for JointMaterial {
 pub struct JointMeshes {
     pub head: Handle<Mesh>,
     pub connector: Handle<Mesh>,
-    pub dof_free: Handle<Mesh>,
-    pub dof_locked: Handle<Mesh>,
+    pub muscle: Handle<Mesh>,
+    // pub dof_free: Handle<Mesh>,
+    // pub dof_locked: Handle<Mesh>,
 }
 
 impl FromWorld for JointMeshes {
     fn from_world(world: &mut World) -> Self {
-        let (dof_free, dof_locked): (Handle<Mesh>, Handle<Mesh>) = {
-            let asset_server = world.resource::<AssetServer>();
-            (
-                asset_server.load("models/dof_pointer.glb#Mesh0/Primitive0"),
-                asset_server.load("models/dof_pointer.glb#Mesh1/Primitive0")
-            )
-        }; // because borrowchecker
+        // let (dof_free, dof_locked): (Handle<Mesh>, Handle<Mesh>) = {
+        //     let asset_server = world.resource::<AssetServer>();
+        //     (
+        //         asset_server.load("models/dof_pointer.glb#Mesh0/Primitive0"),
+        //         asset_server.load("models/dof_pointer.glb#Mesh1/Primitive0")
+        //     )
+        // }; // because borrowchecker
         let mut meshes = world.resource_mut::<Assets<Mesh>>();
         JointMeshes {
             head: meshes.add(Mesh::from(shape::Icosphere {
@@ -57,8 +58,11 @@ impl FromWorld for JointMeshes {
                 radius: 0.25,
                 ..Default::default()
             })),
-            dof_locked, 
-            dof_free 
+            muscle: meshes.add(Mesh::from(shape::Cube {
+                size: 0.2,
+            })),
+            // dof_locked, 
+            // dof_free 
         }
     }
 }
@@ -73,10 +77,10 @@ pub trait Control
 pub enum KeyControls {
     ESAVE,
     EDELETE,
-    EROTATE,
-    EGRAB,
-    EEXTRUDE,
-    ESWITCH_MODE,
+    // EROTATE,
+    // EGRAB,
+    // EEXTRUDE,
+    // ESWITCH_MODE,
     // NONE,
 }
 
@@ -85,10 +89,10 @@ impl KeyControls {
         match self {
             Self::ESAVE => KeyCode::S,
             Self::EDELETE => KeyCode::Delete,
-            Self::EROTATE => KeyCode::R,
-            Self::EGRAB => KeyCode::G,
-            Self::EEXTRUDE => KeyCode::E,
-            Self::ESWITCH_MODE => KeyCode::Tab,
+            // Self::EROTATE => KeyCode::R,
+            // Self::EGRAB => KeyCode::G,
+            // Self::EEXTRUDE => KeyCode::E,
+            // Self::ESWITCH_MODE => KeyCode::Tab,
         }
     }
 }

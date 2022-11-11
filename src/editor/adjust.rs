@@ -14,7 +14,7 @@ pub fn adjust_control(
     mut motion_evr: EventReader<MouseMotion>,
     mut windows: ResMut<Windows>,
     is_adjust_mode: Res<IsAdjustMode>,
-    joint_selected: Res<JointSelected>,
+    entity_selected: Res<EntitySelected>,
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
     cam_query: Query<(&Camera, &GlobalTransform)>,
@@ -23,7 +23,7 @@ pub fn adjust_control(
     mut transform_query: Query<&mut Transform>,
     global_query: Query<&mut GlobalTransform, Without<Camera>>,
 ) {
-    if !is_adjust_mode.0 || joint_selected.0.is_none() {
+    if !is_adjust_mode.0 || !entity_selected.is_joint() {
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
         let window = windows.get_primary_mut().unwrap();
@@ -31,7 +31,7 @@ pub fn adjust_control(
         window.set_cursor_visibility(true);
         return;
     }
-    let joint = joint_selected.0.unwrap();
+    let joint = entity_selected.get().unwrap();
     let mut editable = editable_query.get_mut(joint).unwrap();
     let (cam, cam_transform) = cam_query.single();
 
@@ -40,11 +40,10 @@ pub fn adjust_control(
     for ev in motion_evr.iter() {
         mouse_move += ev.delta;
     }
-    // println!("processing {:?}", joint_selected.0.unwrap().id());
     let editable_mode = if editable.mode.is_some() {
         editable.mode.as_ref().unwrap()
     } else {
-        println!("Editable mode missing for entity {:?}", joint_selected.0.unwrap().id());
+        println!("** Editable mode missing for entity {:?}", joint);
         return;
     };
     match editable_mode {

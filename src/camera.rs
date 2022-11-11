@@ -2,7 +2,7 @@
 use bevy::{prelude::*, input::mouse::*, render::camera::Projection};
 use iyes_loopless::prelude::*;
 
-use crate::editor::selection::JointSelected;
+use crate::editor::selection::EntitySelected;
 
 pub struct PanOrbitCameraPlugin;
 
@@ -122,17 +122,17 @@ fn pan_orbit_camera(
 
 fn focus_selected(
     input: Res<Input<KeyCode>>,
-    joint_selected: Res<JointSelected>,
+    entity_selected: Res<EntitySelected>,
     global_query: Query<&GlobalTransform>,
     mut cam_query: Query<(&mut PanOrbitCamera, &mut Transform)>,
 ) {
-    if !input.just_pressed(KeyCode::Space) || joint_selected.0.is_none() {
+    if !input.just_pressed(KeyCode::Space) || entity_selected.is_none() {
         return;
     }
 
-    let joint = joint_selected.0.unwrap();
+    let entity = entity_selected.get().unwrap();
     let (mut cam, mut cam_transform) = cam_query.single_mut();
-    let transform = global_query.get(joint).unwrap();
+    let transform = global_query.get(entity).unwrap();
     cam.focus = transform.translation();
     // cam.radius = 10.0;
     cam_transform.translation = cam.focus + cam_transform.rotation.mul_vec3(Vec3::new(0.0, 0.0, cam.radius));

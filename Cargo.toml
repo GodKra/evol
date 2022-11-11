@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.8.0" }
-bevy_mod_picking = "0.8"
+bevy_mod_picking = "0.9"
 bevy_mod_raycast = "0.6"
-#mouse_tracking = { package = "bevy_mouse_tracking_plugin", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
-ron = "0.7.0"
+ron = "0.8.0"
 iyes_loopless = "0.7"
 bevy_rapier3d = { version = "*", features = [ "simd-stable", "debug-render" ] }
+bimap = { version = "0.6.2", features = ["serde"] }

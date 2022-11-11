@@ -108,7 +108,7 @@ fn testbut_interact(
         (Changed<Interaction>, With<Button>, With<TestBut>),
     >,
 ) {
-    for (interaction, mut color) in interaction_query.iter_mut() {
+    for (interaction, _) in interaction_query.iter_mut() {
         match *interaction {
             Interaction::Clicked => {
                 println!("Switching State to GameState::Editor");
