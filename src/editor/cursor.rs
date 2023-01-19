@@ -21,7 +21,7 @@ pub fn cursor_control(
     mut entity_selected: ResMut<EntitySelected>,
     added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
     pick_cam: Query<&PickingCamera>,
-    mut editable_query: Query<&mut Editable>,
+    mut editable_q: Query<&mut Editable>,
     mut cursor_query: Query<&mut GlobalTransform, With<EditCursor>>,
     mut visibility_query: Query<&mut Visibility, With<EditCursor>>,
 ) {
@@ -36,23 +36,25 @@ pub fn cursor_control(
             (cube_size * cube_tail_scale) / 2.0,
             0.0,
         ));
-        transform.apply_non_uniform_scale(Vec3::from([1.0, cube_tail_scale, 1.0]));
+        transform.scale *= Vec3::from([1.0, cube_tail_scale, 1.0]);
 
         let cursor_material = &materials.add(StandardMaterial {
             base_color: Color::rgb(1.0, 0.0, 0.0),
             unlit: true,
             ..Default::default()
         });
-        commands.spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube { size: cube_size })),
-            material: cursor_material.clone(),
-            transform,
-            visibility: Visibility { is_visible: false },
-            ..Default::default()
-            
-        })
-        .insert(EditCursor::default())
-        .insert(crate::Editor);
+        commands.spawn((
+            PbrBundle {
+                mesh: meshes.add(Mesh::from(shape::Cube { size: cube_size })),
+                material: cursor_material.clone(),
+                transform,
+                visibility: Visibility { is_visible: false },
+                ..Default::default()
+                
+            },
+            EditCursor::default(),
+            crate::Editor
+        ));
         println!("** Cursor Added");
     }
 
@@ -60,18 +62,16 @@ pub fn cursor_control(
         return;
     }
     let joint = entity_selected.get().unwrap();
-    let mut editable = editable_query.get_mut(joint).unwrap();
+    let Ok(mut editable) = editable_q.get_mut(joint) else {
+        panic!("{}", Errors::ComponentMissingError("Editable", joint))
+    };
 
     if let Some(EditMode::Cursor) = editable.mode {
         let cam = pick_cam.single();
-        if let Some((target, intersection)) = cam.intersect_top() {
+        if let Some((target, intersection)) = cam.get_nearest_intersection() {
             if target == joint {
-                // println!("ignored target: {} \nselected: {}", target.id(), joint.id() );
-                // let transform_new = Mat4::from_rotation_translation(
-                //     Quat::from_rotation_arc(Vec3::Y, intersection.normal()),
-                //      intersection.position()
-                // );
                 let transform_new = Ray3d::new(intersection.position(), intersection.normal()).to_transform();
+                
 
                 for mut transform in cursor_query.iter_mut() {
                     let scale = Vec3::from([

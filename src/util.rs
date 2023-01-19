@@ -1,8 +1,38 @@
 use bevy::{prelude::*};
-use bevy_mod_raycast::Ray3d;
 
+use core::fmt;
 use std::hash::Hash;
 
+
+
+pub enum Errors {
+    /// Errors caused when attempting to get current window. Usually for mouse cursor.
+    WindowError,
+    /// Errors caused when a component is missing. (Component, Entity)
+    ComponentMissingError(&'static str, Entity),
+    /// Errors caused when an element is missing from the ID map. (ID, EntityID)
+    IDMapIncompleteError(Option<u32>, Option<Entity>),
+}
+
+impl fmt::Display for Errors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Errors::WindowError => 
+                write!(f, "WindowError: Not found"),
+            Errors::ComponentMissingError(component, entity) => 
+                write!(f, "ComponentMissingError: Component {:?} not found for entity {:?}", component, entity),
+            Errors::IDMapIncompleteError(id, entity) => 
+                write!(f, "IDMapIncompleteError: {:?} <> {:?}", id, entity),
+        }
+    }
+}
+// impl Into<String> for Errors {
+//     fn into(self) -> String {
+//         
+//     }
+// }
+
+#[derive(Resource)]
 pub struct JointMaterial {
     pub joint_color: Handle<StandardMaterial>,
     pub connector_color: Handle<StandardMaterial>,
@@ -30,6 +60,7 @@ impl FromWorld for JointMaterial {
     }
 }
 
+#[derive(Resource)]
 pub struct JointMeshes {
     pub head: Handle<Mesh>,
     pub connector: Handle<Mesh>,
@@ -132,8 +163,8 @@ pub fn despawn_with<T: Component>(mut commands: Commands, q: Query<Entity, With<
 }
 
 /// Gets the the point of intersection between a plane and ray. Both plane and ray should be in the same coordinate space.
-pub fn get_intersect_plane_ray(plane_pos: Vec3, plane_normal: Vec3, ray: Ray3d) -> Vec3 {
-    ray.origin() + ((plane_pos - ray.origin()).dot(plane_normal))/(ray.direction().dot(plane_normal)) * ray.direction()
+pub fn get_intersect_plane_ray(plane_pos: Vec3, plane_normal: Vec3, ray: Ray) -> Vec3 {
+    ray.origin + ((plane_pos - ray.origin).dot(plane_normal))/(ray.direction.dot(plane_normal)) * ray.direction
 }
 
 /// Returns the quaternion needed for `src` to rotate around the `axis` to reach `dest`.

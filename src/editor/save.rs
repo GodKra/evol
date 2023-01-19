@@ -1,6 +1,6 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::editor::body::Body;
+use crate::{editor::body::Body, util::Errors};
 
 
 use super::{selection::EntitySelected, joint::*, muscle::{MuscleData, Muscle, MuscleConnectors}};
@@ -80,7 +80,9 @@ fn make_points(
         }
         *index = *index + 1;
 
-        let stored_id = id_map.0.get_by_right(joint).unwrap();
+        let Some(stored_id) = id_map.0.get_by_right(joint) else {
+            panic!("{}", Errors::IDMapIncompleteError(None, Some(*joint)))
+        };
         replace_map.0.insert(*stored_id, *index);
 
         let mut point = Point::default();
@@ -134,6 +136,7 @@ pub fn delete_joint(
     mut entity_selected: ResMut<EntitySelected>,
     id_map: Res<IDMap>,
     joint_q: Query<&Joint>,
+    child_q: Query<&Children>,
     mut muscle_con_q: Query<&mut MuscleConnectors>,
 ) {
     if !entity_selected.is_joint() {
@@ -142,14 +145,30 @@ pub fn delete_joint(
 
     let joint = entity_selected.get().unwrap();
     let joint_info = joint_q.get(joint).unwrap();
-    let muscle_info = muscle_con_q.get(joint).unwrap();
+    delete_joints_recursive(&joint, joint_info, &mut commands, &id_map, &joint_q, &child_q, &mut muscle_con_q);
+
+    entity_selected.set(None);
+}
+
+/// deletes a joint and all entities relying on the existence of the joint (muscles, connectors, rotators, and children joints)
+fn delete_joints_recursive(
+    joint: &Entity,
+    joint_info: &Joint,
+    commands: &mut Commands,
+    id_map: &Res<IDMap>,
+    joint_q: &Query<&Joint>,
+    child_q: &Query<&Children>,
+    muscle_con_q: &mut Query<&mut MuscleConnectors>,
+) {
+    let muscle_info = muscle_con_q.get(*joint).unwrap();
+    println!("{:?}", muscle_info);
 
     for (id, muscle) in muscle_info.pair.clone().iter() { // clone workaround for borrowchecker
         commands.entity(*muscle).despawn();
+        println!("{:?}: muscle despawned {:?}", joint, muscle);
         let pair_joint = id_map.0.get_by_left(id).unwrap();
         let mut pair_info = muscle_con_q.get_mut(*pair_joint).unwrap();
         pair_info.pair.remove(id_map.0.get_by_right(&joint).unwrap());
-        
     }
 
     if let Some(rotator) = joint_info.rotator {
@@ -158,7 +177,16 @@ pub fn delete_joint(
     if let Some(connector) = joint_info.connector {
         commands.entity(connector).despawn();
     }
-    
-    commands.entity(joint).despawn_recursive();
-    entity_selected.set(None);
+
+    commands.entity(*joint).despawn();
+
+    let Ok(children) = child_q.get(*joint) else {
+        return;
+    };
+
+    for child in children.iter() {
+        if let Ok(joint_info) = joint_q.get(*child) {
+            delete_joints_recursive(child, joint_info, commands, id_map, joint_q, child_q, muscle_con_q);
+        }
+    }
 }

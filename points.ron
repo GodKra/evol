@@ -9,11 +9,7 @@
       r_coords: (0.0, 0.0, 5.0),
       connections: [
        (
-        r_coords: (5.849, -0.067, -0.01),
-        connections: [],
-       ),
-       (
-        r_coords: (-0.621, 4.968, 0.726),
+        r_coords: (5.0, 0.0, 0.0),
         connections: [],
        ),
       ],
@@ -27,7 +23,7 @@
       r_coords: (0.0, 0.0, -5.0),
       connections: [
        (
-        r_coords: (-4.002, 1.225, 2.736),
+        r_coords: (-5.0, 0.0, 0.0),
         connections: [],
        ),
       ],
@@ -35,18 +31,29 @@
     ],
    ),
    (
-    r_coords: (0.316, 7.527, -0.886),
+    r_coords: (0.0, -5.0, 0.0),
+    connections: [],
+   ),
+   (
+    r_coords: (0.0, 5.0, 0.0),
     connections: [],
    ),
   ],
  ),
  muscle: (
   pairs: {
-   8: [
-    9,
+   6: [
+    7,
+   ],
+   3: [
+    4,
    ],
    5: [
+    8,
+   ],
+   2: [
     9,
+    3,
    ],
   },
  ),

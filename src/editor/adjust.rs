@@ -1,5 +1,4 @@
 use bevy::{prelude::*, input::{mouse::MouseMotion}};
-use bevy_mod_raycast::Ray3d;
 use crate::{
     util::*,
 };
@@ -26,13 +25,17 @@ pub fn adjust_control(
     if !is_adjust_mode.0 || !entity_selected.is_joint() {
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
-        let window = windows.get_primary_mut().unwrap();
-        window.set_cursor_lock_mode(false);
+        let Some(window) = windows.get_primary_mut() else {
+            panic!("{}", Errors::WindowError);
+        };
+        window.set_cursor_grab_mode(bevy::window::CursorGrabMode::None);
         window.set_cursor_visibility(true);
         return;
     }
     let joint = entity_selected.get().unwrap();
-    let mut editable = editable_query.get_mut(joint).unwrap();
+    let Ok(mut editable) = editable_query.get_mut(joint) else {
+        panic!("{}", Errors::ComponentMissingError("Editable", joint));
+    };
     let (cam, cam_transform) = cam_query.single();
 
     let mut mouse_move = Vec2::ZERO;
@@ -48,7 +51,9 @@ pub fn adjust_control(
     };
     match editable_mode {
         EditMode::GrabExtend => {
-            let mut point = joint_query.get_mut(joint).unwrap();
+            let Ok(mut point) = joint_query.get_mut(joint) else {
+                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+            };
             
             if point.parent.is_none() {
                 editable.mode = Some(EditMode::GrabFull);
@@ -88,25 +93,24 @@ pub fn adjust_control(
             let len = transform.translation.length();
             point.dist = len; // update internal length
 
-            let window = windows.get_primary_mut().unwrap();
-            window.set_cursor_lock_mode(true);
+            let Some(window) = windows.get_primary_mut() else {
+                panic!("{}", Errors::WindowError);
+            };
+            window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
             window.set_cursor_visibility(false);
             window.set_cursor_position(s_pos.unwrap());
         },
         // both has similar logic
         EditMode::RotateFull | EditMode::GrabFull => {
-            let cursor = windows.get_primary().unwrap().cursor_position();
-            let mouse_pos = if let Some(cursor) = cursor {
-                cursor
-            } else {
+            let Some(window) = windows.get_primary() else {
+                panic!("{}", Errors::WindowError);
+            };
+
+            let Some(mouse_pos) = window.cursor_position() else {
                 return
             };
             
-            let ray = Ray3d::from_screenspace(
-                mouse_pos,
-                cam, 
-                cam_transform
-            ).unwrap();
+            let ray = cam.viewport_to_world(cam_transform, mouse_pos).unwrap();
 
             let mut point = joint_query.get_mut(joint).unwrap();
 
@@ -122,9 +126,9 @@ pub fn adjust_control(
             
             // https://antongerdelan.net/opengl/raycasting.html
             let radius = (joint_global-parent_global).length();
-            let rot_to_ray = ray.origin() - parent_global;
-            let joint_to_ray = ray.origin() - joint_global;
-            let b = ray.direction().dot(rot_to_ray);
+            let rot_to_ray = ray.origin - parent_global;
+            let joint_to_ray = ray.origin - joint_global;
+            let b = ray.direction.dot(rot_to_ray);
             let c = rot_to_ray.dot(rot_to_ray) - radius * radius;
             // rotation is spherical when within radius
             let len = if b*b - c >= 0.0 && editable.mode.as_ref().unwrap() != &EditMode::GrabFull {
@@ -139,16 +143,16 @@ pub fn adjust_control(
             // planar rotation outside radius ** TODO: fix slow movement when transitioning **
             } else {
                 let a = cam_transform.forward();
-                let b = joint_global-ray.origin();
-                let c = ray.direction();
+                let b = joint_global-ray.origin;
+                let c = ray.direction;
                 // length of c at which b - c is orthogonal to a, just (Cos0 = A / H) in vectors
                 (a.dot(b)/a.length()) / (a.dot(c)/(a.length()*c.length()))
             };
             
             let mut joint_local = transform_query.get_mut(joint).unwrap();
 
-            let ray_pos = ray.direction() * len;
-            let mouse_pos = ray.origin() + ray_pos;
+            let ray_pos = ray.direction * len;
+            let mouse_pos = ray.origin + ray_pos;
             if let Some(EditMode::GrabFull) = editable.mode {
                 let dir_vec = mouse_pos-parent_global;
                 // let pos_c = pos_cache.0;
@@ -161,7 +165,9 @@ pub fn adjust_control(
             }
         },
         EditMode::GrabAxis(axis) => {
-            let mut point = joint_query.get_mut(joint).unwrap();
+            let Ok(mut point) = joint_query.get_mut(joint) else {
+                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+            };
             
             if point.parent.is_none() {
                 editable.mode = Some(EditMode::GrabFull);
@@ -192,26 +198,27 @@ pub fn adjust_control(
             let len = transform.translation.length();
             point.dist = len; // update internal length
 
-            let window = windows.get_primary_mut().unwrap();
-            window.set_cursor_lock_mode(true);
+            let Some(window) = windows.get_primary_mut() else {
+                panic!("{}", Errors::WindowError);
+            };
+            window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
             window.set_cursor_visibility(false);
             window.set_cursor_position(s_pos.unwrap());
         },
         EditMode::RotateAxis(axis) => {
-            let cursor = windows.get_primary().unwrap().cursor_position();
-            let mouse_pos = if cursor.is_some() {
-                cursor.unwrap()
-            } else {
+            let Some(window) = windows.get_primary() else {
+                panic!("{}", Errors::WindowError);
+            };
+
+            let Some(mouse_pos) = window.cursor_position() else {
                 return
             };
             
-            let ray = Ray3d::from_screenspace(
-                mouse_pos,
-                cam, 
-                cam_transform
-            ).unwrap();
+            let ray = cam.viewport_to_world(cam_transform, mouse_pos).unwrap();
 
-            let point = joint_query.get_mut(joint).unwrap();
+            let Ok(point) = joint_query.get(joint) else {
+                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+            };
             
             if point.parent.is_none() {
                 editable.mode = Some(EditMode::GrabFull);
@@ -247,7 +254,6 @@ pub fn update_connector(
     mut transform_q: Query<&mut Transform, Without<Joint>>,
 ) {
     for (joint, transform) in changed_joints.iter() {
-        // println!("REEE");
         if joint.rotator.is_none() {
             continue;
         }

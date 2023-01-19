@@ -38,61 +38,64 @@ fn init(
 ) {
     // Position information text
     let font = asset_server.load("fonts/FiraCode-Regular.ttf");
-    commands.spawn_bundle(TextBundle {
-        style: Style {
-            align_self: AlignSelf::FlexEnd,
-            position_type: PositionType::Absolute,
-            position: UiRect {
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
+    commands.spawn((
+        TextBundle {
+            style: Style {
+                align_self: AlignSelf::FlexEnd,
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    top: Val::Px(5.0),
+                    left: Val::Px(5.0),
+                    ..default()
+                },
                 ..default()
+            },
+            text: Text {
+                sections: vec![
+                        TextSection {
+                            value: "".to_string(),
+                            style: TextStyle {
+                                font: font.clone(),
+                                font_size: 13.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                        TextSection {
+                            value: "".to_string(),
+                            style: TextStyle {
+                                font: font.clone(),
+                                font_size: 13.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                        TextSection {
+                            value: "".to_string(),
+                            style: TextStyle {
+                                font: font.clone(),
+                                font_size: 13.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                        TextSection {
+                            value: "".to_string(),
+                            style: TextStyle {
+                                font: font.clone(),
+                                font_size: 13.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                    ],
+                    alignment: Default::default(),
             },
             ..default()
         },
-        text: Text {
-            sections: vec![
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: font.clone(),
-                            font_size: 13.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: font.clone(),
-                            font_size: 13.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: font.clone(),
-                            font_size: 13.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: font.clone(),
-                            font_size: 13.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                ],
-                alignment: Default::default(),
-        },
-        ..default()
-    }).insert(PosText)
-        .insert(Editor);
+        PosText,
+        Editor
+    ));
 
     // Transition button
     commands
-        .spawn_bundle(NodeBundle {
+        .spawn(NodeBundle {
             style: Style {
                 size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
                 position_type: PositionType::Absolute,
@@ -100,11 +103,11 @@ fn init(
                 align_items: AlignItems::FlexEnd,
                 ..default()
             },
-            color: Color::NONE.into(),
+            background_color: Color::NONE.into(),
             ..default()
         }).with_children(|parent| {
             parent
-                .spawn_bundle(ButtonBundle {
+                .spawn(ButtonBundle {
                     style: Style {
                         size: Size::new(Val::Px(80.0), Val::Px(30.0)),
                         margin: UiRect {
@@ -115,11 +118,11 @@ fn init(
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    color: Color::rgb(0.15, 0.15, 0.15).into(),
+                    background_color: Color::rgb(0.15, 0.15, 0.15).into(),
                     ..default()
                 })
                 .with_children(|parent| {
-                    parent.spawn_bundle(TextBundle {
+                    parent.spawn(TextBundle {
                         text: Text::from_section(
                             "Test",
                             TextStyle {
@@ -199,7 +202,7 @@ fn update_pos_info(
 fn tbutton_interact(
     mut commands: Commands,
     mut interaction_query: Query<
-        (&Interaction, &mut UiColor),
+        (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>, With<TButton>),
     >,
 ) {

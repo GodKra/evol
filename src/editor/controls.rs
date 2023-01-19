@@ -23,7 +23,9 @@ pub fn editor_mode_toggle(
     }
 
     let joint_selected = entity_selected.get().unwrap();
-    let mut editable = editable_q.get_mut(joint_selected).unwrap();
+    let Ok(mut editable) = editable_q.get_mut(joint_selected) else {
+        panic!("{}", Errors::ComponentMissingError("Editable", joint_selected))
+    };
 
     let key_inputs = key_input.get_just_pressed();
 

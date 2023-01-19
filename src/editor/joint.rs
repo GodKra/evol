@@ -14,7 +14,7 @@ use super::{muscle::{MuscleConnectors, MuscleHalfs, MuscleData, Muscle}};
 
 /// Joint ID Counter. Used to simplify serialization of muscles by mapping a 
 /// sequential ID to the in game Entity ID of joints.
-#[derive(Default, Debug)]
+#[derive(Default, Resource, Debug)]
 pub struct IDCounter(u32);
 
 impl IDCounter {
@@ -27,7 +27,7 @@ impl IDCounter {
 }
 
 /// Sequential ID to EntityID map. ID 0 is reserved for mouse anchor.
-#[derive(Default, Debug)]
+#[derive(Default, Resource, Debug)]
 pub struct IDMap(pub BiHashMap<u32, Entity>);
 
 /// Data representation of Joints.
@@ -86,11 +86,14 @@ impl Point {
         if let Some(muscle_pairs) = muscle_data.pairs.get(&id) {
             for pair in muscle_pairs {
                 // Create muscle entity
-                let muscle = commands.spawn_bundle(PbrBundle {
-                    mesh: meshes.connector.clone(),
-                    material: materials.muscle_color.clone(),
-                    ..Default::default()
-                }).insert(Muscle { anchor1: id, anchor2: *pair }).id();
+                let muscle = commands.spawn((
+                    PbrBundle {
+                        mesh: meshes.connector.clone(),
+                        material: materials.muscle_color.clone(),
+                        ..Default::default()
+                    },
+                    Muscle { anchor1: id, anchor2: *pair }
+                )).id();
 
                 muscle_connectors.pair.insert(*pair, muscle);
                 
@@ -144,18 +147,19 @@ pub fn create_joint(
 
     if parent.is_none() {
         parent = {
-            let p = commands.spawn_bundle(PbrBundle {
-                mesh: meshes.head.clone(),
-                material: materials.joint_color.clone(),
-                transform: Transform::from_translation(position),
-                ..Default::default()
-            })
-            .insert(PickableMesh::default())
-            .insert(Editable::default())
-            .insert(Root) // Only the root needs this marker (change in future?)
-            .insert(crate::Editor)
-            .insert(joint)
-            .id();
+            let p = commands.spawn((
+                PbrBundle {
+                    mesh: meshes.head.clone(),
+                    material: materials.joint_color.clone(),
+                    transform: Transform::from_translation(position),
+                    ..Default::default()
+                },
+                PickableMesh::default(),
+                Editable::default(),
+                Root, // Only the root needs this marker (change in future?)
+                crate::Editor,
+                joint
+            )).id();
             commands.entity(p).insert(Selectable::with_type(SelectableEntity::Joint(p)));
             Some(p)
         };
@@ -165,26 +169,27 @@ pub fn create_joint(
         let rotation = Quat::from_rotation_arc(Vec3::Y, position.normalize());
         
         // Rotator
-        let rotator = Some(commands.spawn_bundle(PbrBundle {
-            transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, Vec3::default())),
-            ..Default::default()
-        })
-          .with_children(|p| {
+        let rotator = Some(commands.spawn(
+            PbrBundle {
+                transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, Vec3::default())),
+                ..Default::default()
+        }).with_children(|p| {
             // Connector
             let scale = Vec3::from([1.0, len/2.0, 1.0]);
             let rotation = Quat::default();
             let translation = Vec3::new(0.0, len/2.0, 0.0);
 
             joint.connector = Some(
-                p.spawn_bundle(PbrBundle {
-                    mesh: meshes.connector.clone(),
-                    material: materials.connector_color.clone(),
-                    transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation)),
-                    ..Default::default()
-                })
-                // .insert(Connector)
-                .insert(PickableMesh::default())
-                .id()
+                p.spawn((
+                    PbrBundle {
+                        mesh: meshes.connector.clone(),
+                        material: materials.connector_color.clone(),
+                        transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation)),
+                        ..Default::default()
+                    },
+                    //Connector
+                    PickableMesh::default()
+                )).id()
             );
         }).id());
         commands.entity(joint.connector.unwrap()).insert(Selectable::with_type(SelectableEntity::Connector(joint.connector.unwrap())));
@@ -194,17 +199,18 @@ pub fn create_joint(
         joint.rotator = rotator;
 
         // Main Joint
-        let current = commands.spawn_bundle(PbrBundle {
-            mesh: meshes.head.clone(),
-            material: materials.joint_color.clone(),
-            transform: Transform::from_translation(position),
-            ..Default::default()
-        })
-        .insert(PickableMesh::default())
-        .insert(Editable{ mode: edit_mode })
-        .insert(MuscleConnectors::default())
-        .insert(joint.clone())
-        .id();
+        let current = commands.spawn((
+            PbrBundle {
+                mesh: meshes.head.clone(),
+                material: materials.joint_color.clone(),
+                transform: Transform::from_translation(position),
+                ..Default::default()
+            },
+            PickableMesh::default(),
+            Editable{ mode: edit_mode },
+            MuscleConnectors::default(),
+            joint.clone(),
+        )).id();
         commands.entity(current).insert(Selectable::with_type(SelectableEntity::Joint(current)));
         commands.entity(joint.connector.unwrap()).insert(Connector { head_joint: current });
 

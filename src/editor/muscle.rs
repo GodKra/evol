@@ -4,7 +4,7 @@ use bevy::{prelude::*};
 use bevy_mod_picking::PickingCamera;
 use serde::{Serialize, Deserialize};
 
-use crate::util::{JointMaterial, JointMeshes};
+use crate::util::{JointMaterial, JointMeshes, Errors};
 
 use super::{selection::EntitySelected, IsMuscleMode, joint::{Connector, IDMap, Joint}};
 
@@ -34,7 +34,7 @@ pub struct MuscleHalfs {
 }
 
 /// (Joint, Muscle); describes the first anchor when creating a muscle.
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct MuscleRoot(Option<(Entity, Entity)>);
 
 /// Marker for Entity used to give an anchor (cursor's projected position) to muscles which does not have a second anchor
@@ -60,17 +60,16 @@ pub fn muscle_construct(
     mut muscle_q: Query<&mut Muscle>,
 ) {
     for _ in added_pick_cam.iter() { // runs only once when initializing.
-        let anchor = commands.spawn_bundle(TransformBundle::default())
-        .insert(CursorAnchor).id();
+        let anchor = commands.spawn((TransformBundle::default(), CursorAnchor)).id();
 
         id_map.0.insert(0, anchor);
     }
 
-    if !is_muscle_mode.0 && entity_selected.is_connector() && key_input.just_pressed(KeyCode::M){
+    if !is_muscle_mode.0 && entity_selected.is_connector() && key_input.just_pressed(KeyCode::M) { // First anchor is set
         is_muscle_mode.0 = true;
         return;
     }
-    if !is_muscle_mode.0 || !entity_selected.is_connector() {
+    if !is_muscle_mode.0 || !entity_selected.is_connector() { // Entity selected is not a muscle anchor so reset
         if is_muscle_mode.0 {
             is_muscle_mode.0 = false;
             if let Some((_, muscle)) = muscle_root.0 {
@@ -80,22 +79,29 @@ pub fn muscle_construct(
         }
         return;
     }
-    let connector = connector_q.get(entity_selected.get().unwrap()).unwrap();
+
+    let connector = connector_q.get(entity_selected.get().unwrap()).unwrap(); // both unwraps are certain to work with earlier checks
     let joint = connector.head_joint;
-    if muscle_root.0.is_none() {
-        let joint_id = id_map.0.get_by_right(&joint).unwrap();
-        let muscle = commands.spawn_bundle(PbrBundle {
-            mesh: meshes.connector.clone(),
-            material: materials.muscle_color.clone(),
-            ..Default::default()
-        })
-        .insert(Muscle { anchor1: *joint_id, anchor2: 0 }).id();
+    if muscle_root.0.is_none() { // No anchor set yet
+        let Some(joint_id) = id_map.0.get_by_right(&joint) else {
+            panic!("{}", Errors::IDMapIncompleteError(None, Some(joint)))
+        };
+        let muscle = commands.spawn((
+            PbrBundle {
+                mesh: meshes.connector.clone(),
+                material: materials.muscle_color.clone(),
+                ..Default::default()
+            },
+            Muscle { anchor1: *joint_id, anchor2: 0 }
+        )).id();
         muscle_root.0 = Some((joint, muscle));
     } else {
-        if muscle_root.0.unwrap().0 == joint {
+        if muscle_root.0.unwrap().0 == joint { // Root joint is selected again as second anchor
             return;
         }
-        let joint_id = id_map.0.get_by_right(&joint).unwrap();
+        let Some(joint_id) = id_map.0.get_by_right(&joint) else {
+            panic!("{}", Errors::IDMapIncompleteError(None, Some(joint)))
+        };
 
         let (anchor1, muscle) = muscle_root.0.unwrap();
         let mut muscle_comp = muscle_q.get_mut(muscle).unwrap();
@@ -104,7 +110,9 @@ pub fn muscle_construct(
         muscle_comp.anchor1 = *joint_id.min(&muscle_comp.anchor1);
 
         // Anchor1
-        let mut muscle_con = muscle_con_q.get_mut(anchor1).unwrap();
+        let Ok(mut muscle_con) = muscle_con_q.get_mut(anchor1) else {
+            panic!("{}", Errors::ComponentMissingError("MuscleConnectors", anchor1))
+        };
         if muscle_con.pair.contains_key(joint_id) {
             println!(":: Muscle already exists");
             is_muscle_mode.0 = false;
@@ -115,8 +123,12 @@ pub fn muscle_construct(
         muscle_con.pair.insert(*joint_id, muscle);
 
         // Anchor2
-        let anchor1_id = id_map.0.get_by_right(&anchor1).unwrap();
-        let mut muscle_con = muscle_con_q.get_mut(joint).unwrap();
+        let Some(anchor1_id) = id_map.0.get_by_right(&anchor1) else {
+            panic!("{}", Errors::IDMapIncompleteError(None, Some(anchor1)))
+        };
+        let Ok(mut muscle_con) = muscle_con_q.get_mut(joint) else {
+            panic!("{}", Errors::ComponentMissingError("MuscleConnectors", joint))
+        };
         muscle_con.pair.insert(*anchor1_id, muscle);
 
         is_muscle_mode.0 = false;
@@ -137,7 +149,9 @@ pub fn update_muscles(
 ) {
     for (j1, connectors) in changed_connectors.iter() { // update position on joint movement
         for (j2, muscle) in connectors.pair.iter() {
-            let j2 = id_map.0.get_by_left(j2).unwrap();
+            let Some(j2) = id_map.0.get_by_left(j2) else {
+                panic!("{}", Errors::IDMapIncompleteError(Some(*j2), None))
+            };
 
             let mut transform_q = muscle_set.p1();
             let mut m_transform = transform_q.get_mut(*muscle).unwrap();
@@ -149,8 +163,12 @@ pub fn update_muscles(
         if muscle.anchor1 == 0 || muscle.anchor2 == 0 {
             return
         }
-        let j1 = id_map.0.get_by_left(&muscle.anchor1).unwrap();
-        let j2 = id_map.0.get_by_left(&muscle.anchor2).unwrap();
+        let Some(j1) = id_map.0.get_by_left(&muscle.anchor1) else {
+            panic!("{}", Errors::IDMapIncompleteError(Some(muscle.anchor1), None))
+        };
+        let Some(j2) = id_map.0.get_by_left(&muscle.anchor2) else {
+            panic!("{}", Errors::IDMapIncompleteError(Some(muscle.anchor2), None))
+        };
 
         *m_transform = get_muscle_transform(*j1, *j2, &joint_q,);
     }

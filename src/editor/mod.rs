@@ -69,18 +69,18 @@ impl PosAxis {
     } 
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct IsAdjustMode(bool);
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct IsMuscleMode(bool);
 
 /// Stores the former position of a joint when in Grab mode.
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct PositionCache(Vec3);
 
 /// Stores the total movement of a joint when in grab extrude/axis mode.
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct MovementCache(f32);
 
 //
@@ -187,16 +187,19 @@ fn setup(
     // let mut camera = OrthographicCameraBundle::new_3d();
     // camera.orthographic_projection.scale = 3.0;
     // camera.transform = Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y);
-    commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_translation(translation)
-        .looking_at(Vec3::ZERO, Vec3::Y),
-        ..Default::default()
-    }).insert_bundle(PickingCameraBundle::default())
-        .insert(crate::camera::PanOrbitCamera {
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_translation(translation)
+            .looking_at(Vec3::ZERO, Vec3::Y),
+            ..Default::default()
+        },
+        PickingCameraBundle::default(),
+        crate::camera::PanOrbitCamera {
             radius,
             ..Default::default()
-        })
-        .insert(crate::Editor);
+        },
+        crate::Editor
+    ));
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.3,

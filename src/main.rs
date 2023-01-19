@@ -26,20 +26,29 @@ fn main() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
         // Set WindowDescriptor Resource to change title and size
-        .insert_resource(WindowDescriptor {
-            title: "test".to_string(),
-            // mode: bevy::window::WindowMode::SizedFullscreen,
-            width: 700.,
-            height: 700.,
-            ..Default::default()
-        })
-        .add_plugins(DefaultPlugins)
+        // .insert_resource(WindowDescriptor {
+        //     title: "test".to_string(),
+        //     // mode: bevy::window::WindowMode::SizedFullscreen,
+        //     width: 700.,
+        //     height: 700.,
+        //     ..Default::default()
+        // })
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            window: WindowDescriptor {
+                    title: "test".to_string(),
+                    // mode: bevy::window::WindowMode::SizedFullscreen,
+                    width: 700.,
+                    height: 700.,
+                    ..default()
+                },
+            ..default()
+        }))
         .add_loopless_state(GameState::Editor)
         .add_plugin(PickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin)
         .add_plugin(camera::PanOrbitCameraPlugin)
         .add_plugin(editor::EditorPlugin)
-        .add_plugin(observer::ObserverPlugin)
+        // .add_plugin(observer::ObserverPlugin)
         .init_resource::<util::JointMeshes>()
         .init_resource::<util::JointMaterial>()
         .add_exit_system(GameState::Editor, util::despawn_with::<Editor>)
@@ -57,7 +66,7 @@ fn test(
     asset_server: Res<AssetServer>, 
 ) {
     commands
-        .spawn_bundle(NodeBundle {
+        .spawn(NodeBundle {
             style: Style {
                 size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
                 position_type: PositionType::Absolute,
@@ -65,11 +74,10 @@ fn test(
                 align_items: AlignItems::FlexEnd,
                 ..default()
             },
-            color: Color::NONE.into(),
             ..default()
         }).with_children(|parent| {
             parent
-                .spawn_bundle(ButtonBundle {
+                .spawn(ButtonBundle {
                     style: Style {
                         size: Size::new(Val::Px(80.0), Val::Px(30.0)),
                         margin: UiRect {
@@ -80,11 +88,11 @@ fn test(
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    color: Color::rgb(0.15, 0.15, 0.15).into(),
+                    background_color: Color::rgb(0.15, 0.15, 0.15).into(),
                     ..default()
                 })
                 .with_children(|parent| {
-                    parent.spawn_bundle(TextBundle {
+                    parent.spawn(TextBundle {
                         text: Text::from_section(
                             "GO",
                             TextStyle {
@@ -104,7 +112,7 @@ fn test(
 fn testbut_interact(
     mut commands: Commands,
     mut interaction_query: Query<
-        (&Interaction, &mut UiColor),
+        (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>, With<TestBut>),
     >,
 ) {

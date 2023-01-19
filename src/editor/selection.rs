@@ -45,6 +45,7 @@ impl Plugin for SelectionPlugin {
 }
 
 // Colors
+#[derive(Resource)]
 pub struct SelectionMaterials {
     pub parent_color: Handle<StandardMaterial>,
     pub child_color: Handle<StandardMaterial>,
@@ -112,7 +113,7 @@ impl Selectable {
 }
 
 /// Currently selected Entity. If SelectionUpdated is true then the entity set will be highlighted.
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct EntitySelected(pub Option<SelectableEntity>);
 
 impl EntitySelected {
@@ -159,7 +160,7 @@ impl EntitySelected {
 }
 
 /// Set to true if any changes are to be made to the selection
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct SelectionUpdated(pub bool);
 
 /// System to set the joint_selected resource when mouse clicked
@@ -174,7 +175,7 @@ fn joint_select(
     // this should always work
     let cam = pick_cam.single();
     
-    if let Some((selected, _)) = cam.intersect_top() {
+    if let Some((selected, _)) = cam.get_nearest_intersection() {
         // does not run if selection has just been updated (for joint creation through cursor)
         if entity_selected.contains(selected) || selection_updated.0 {
             return;
