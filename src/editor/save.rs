@@ -3,7 +3,7 @@ use bevy::{prelude::*, utils::HashMap};
 use crate::{editor::body::Body, util::Errors};
 
 
-use super::{selection::EntitySelected, joint::*, muscle::{MuscleData, Muscle, MuscleConnectors}};
+use super::{joint::*, muscle::{MuscleData, Muscle}};
 
 
 /// A map used to fix the out-of-order IDs (caused when adding and removing muscles) in the ID Map when saving.
@@ -20,11 +20,10 @@ pub fn save(
     child_q: Query<&Children, With<Joint>>,
     joint_q: Query<&Joint>,
     muscle_q: Query<&Muscle>,
-    muscle_con_q: Query<&MuscleConnectors>,
 ) {
     let root = root_q.single();
     let mut replace_map = ReplaceMap::default();
-    // let mut muscle_data = MuscleData::default();
+    // let mut muscle_data = MuscleData::default();/
 
     let points = Point { 
         connections: make_points(
@@ -35,7 +34,6 @@ pub fn save(
             &child_q, 
             &transform_q,
             &joint_q,
-            &muscle_con_q,
         ),
         ..default()
     };
@@ -66,7 +64,6 @@ fn make_points(
     child_q: &Query<&Children, With<Joint>>, // With<> restriction doesn't work with children?
     transform_q: &Query<&GlobalTransform, With<Joint>>,
     joint_q: &Query<&Joint>,
-    muscle_con_q: &Query<&MuscleConnectors>,
 ) -> Vec<Point> {
     let mut p = Vec::new();
 
@@ -78,10 +75,10 @@ fn make_points(
         if !joint_q.contains(*joint) { // With<> resitriction problem
             continue;
         }
-        *index = *index + 1;
+        *index += 1;
 
         let Some(stored_id) = id_map.0.get_by_right(joint) else {
-            panic!("{}", Errors::IDMapIncompleteError(None, Some(*joint)))
+            panic!("{}", Errors::IDMapIncomplete(None, Some(*joint)))
         };
         replace_map.0.insert(*stored_id, *index);
 
@@ -102,7 +99,6 @@ fn make_points(
             child_q, 
             transform_q, 
             joint_q, 
-            muscle_con_q, 
         );
         p.push(point);
     }
@@ -126,67 +122,4 @@ fn make_muscles(
         m.pairs.entry(k).or_insert_with(Vec::new).push(v)
     }
     m
-}
-
-/// System to handle deletion of joints
-/// 
-/// *active
-pub fn delete_joint(
-    mut commands: Commands,
-    mut entity_selected: ResMut<EntitySelected>,
-    id_map: Res<IDMap>,
-    joint_q: Query<&Joint>,
-    child_q: Query<&Children>,
-    mut muscle_con_q: Query<&mut MuscleConnectors>,
-) {
-    if !entity_selected.is_joint() {
-        return;
-    }
-
-    let joint = entity_selected.get().unwrap();
-    let joint_info = joint_q.get(joint).unwrap();
-    delete_joints_recursive(&joint, joint_info, &mut commands, &id_map, &joint_q, &child_q, &mut muscle_con_q);
-
-    entity_selected.set(None);
-}
-
-/// deletes a joint and all entities relying on the existence of the joint (muscles, connectors, rotators, and children joints)
-fn delete_joints_recursive(
-    joint: &Entity,
-    joint_info: &Joint,
-    commands: &mut Commands,
-    id_map: &Res<IDMap>,
-    joint_q: &Query<&Joint>,
-    child_q: &Query<&Children>,
-    muscle_con_q: &mut Query<&mut MuscleConnectors>,
-) {
-    let muscle_info = muscle_con_q.get(*joint).unwrap();
-    println!("{:?}", muscle_info);
-
-    for (id, muscle) in muscle_info.pair.clone().iter() { // clone workaround for borrowchecker
-        commands.entity(*muscle).despawn();
-        println!("{:?}: muscle despawned {:?}", joint, muscle);
-        let pair_joint = id_map.0.get_by_left(id).unwrap();
-        let mut pair_info = muscle_con_q.get_mut(*pair_joint).unwrap();
-        pair_info.pair.remove(id_map.0.get_by_right(&joint).unwrap());
-    }
-
-    if let Some(rotator) = joint_info.rotator {
-        commands.entity(rotator).despawn();
-    }
-    if let Some(connector) = joint_info.connector {
-        commands.entity(connector).despawn();
-    }
-
-    commands.entity(*joint).despawn();
-
-    let Ok(children) = child_q.get(*joint) else {
-        return;
-    };
-
-    for child in children.iter() {
-        if let Ok(joint_info) = joint_q.get(*child) {
-            delete_joints_recursive(child, joint_info, commands, id_map, joint_q, child_q, muscle_con_q);
-        }
-    }
 }

@@ -24,7 +24,7 @@ pub fn editor_mode_toggle(
 
     let joint_selected = entity_selected.get().unwrap();
     let Ok(mut editable) = editable_q.get_mut(joint_selected) else {
-        panic!("{}", Errors::ComponentMissingError("Editable", joint_selected))
+        panic!("{}", Errors::ComponentMissing("Editable", joint_selected))
     };
 
     let key_inputs = key_input.get_just_pressed();
@@ -82,14 +82,14 @@ pub fn editor_mode_toggle(
                     _ => (),
                 }
             },
-            KeyCode::F => {
-                match &editable.mode {
-                    None => {
-                        editable.mode = Some(EditMode::AOF);
-                    },
-                    _ => (),
-                }
-            }
+            // KeyCode::F => {
+            //     match &editable.mode {
+            //         None => {
+            //             editable.mode = Some(EditMode::AOF);
+            //         },
+            //         _ => (),
+            //     }
+            // }
             KeyCode::X | KeyCode::Y | KeyCode::Z => {
                 match &editable.mode {
                     Some(mode) => {

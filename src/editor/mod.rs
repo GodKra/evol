@@ -5,6 +5,7 @@ pub mod body;
 pub mod joint;
 pub mod muscle;
 pub mod save;
+pub mod delete;
 pub mod selection;
 pub mod ui;
 
@@ -33,17 +34,16 @@ pub const MUSCLE_CONSTRUCT: &str = "muscle_construct";
 // Assets
 //
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum EditMode {
     Cursor,
     GrabFull,    GrabExtend,
     GrabAxis(PosAxis),
     RotateFull,
     RotateAxis(PosAxis),
-    AOF,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PosAxis {
     X,
     Y,
@@ -144,12 +144,19 @@ impl Plugin for EditorPlugin {
                 })
             )
             .add_system(
-                self::save::delete_joint
+                self::delete::delete
                 .run_in_state(crate::GameState::Editor)
                 .run_if(|input: Res<Input<KeyCode>>| {
                     KeyControls::EDELETE.pressed(input)
                 })
             )
+            // .add_system(
+            //     self::delete::delete_muscle
+            //     .run_in_state(crate::GameState::Editor)
+            //     .run_if(|input: Res<Input<KeyCode>>| {
+            //         KeyControls::EDELETE.pressed(input)
+            //     })
+            // )
             .add_system(
                 muscle::muscle_construct
                 .run_in_state(crate::GameState::Editor)

@@ -19,7 +19,7 @@ pub struct IDCounter(u32);
 
 impl IDCounter {
     pub fn get(&mut self) -> u32 {
-        return self.0;
+        self.0
     }
     pub fn increment(&mut self) {
         self.0 += 1;
@@ -92,8 +92,10 @@ impl Point {
                         material: materials.muscle_color.clone(),
                         ..Default::default()
                     },
-                    Muscle { anchor1: id, anchor2: *pair }
+                    Muscle { anchor1: id, anchor2: *pair },
+                    PickableMesh::default(),
                 )).id();
+                commands.entity(muscle).insert(Selectable::with_type(SelectableEntity::Muscle(muscle)));
 
                 muscle_connectors.pair.insert(*pair, muscle);
                 
@@ -119,7 +121,7 @@ impl Point {
         for connection in &mut self.connections {
             connection.create_points(
                 commands, 
-                meshes.clone(), 
+                meshes, 
                 materials,
                 id_counter,
                 id_map,
@@ -221,5 +223,5 @@ pub fn create_joint(
     
     id_counter.increment();
     id_map.0.insert(id_counter.get(), parent.unwrap()); // parent here refers to the joint created in this function (technically it is the new parent)
-    return parent.unwrap();
+    parent.unwrap()
 }

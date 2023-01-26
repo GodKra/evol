@@ -4,6 +4,7 @@
 // use bevy_rapier3d::prelude::*;
 
 // mod joint;
+// mod body;
 
 // pub struct ObserverPlugin;
 // impl Plugin for ObserverPlugin {
@@ -21,26 +22,31 @@
 
 // fn setup_graphics(mut commands: Commands) {
 //     // Add a camera so we can see the debug-render.
-//     commands.spawn_bundle(Camera3dBundle {
-//         transform: Transform::from_xyz(0.0, 10.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
-//         ..Default::default()
-//     })
-//         .insert(crate::camera::PanOrbitCamera {
+//     commands.spawn((
+//         Camera3dBundle {
+//             transform: Transform::from_xyz(0.0, 10.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
+//             ..Default::default()
+//         },
+//         crate::camera::PanOrbitCamera {
 //             radius: 40.,
 //             focus: Vec3::ZERO,
 //             ..Default::default()
-//         })
-//         .insert(crate::Observer);
+//         },
+//         crate::Observer
+//     ));
 
-//     commands.spawn_bundle(PointLightBundle {
-//         point_light: PointLight {
-//             intensity: 1500.0,
-//             shadows_enabled: true,
+//     commands.spawn((
+//         PointLightBundle {
+//             point_light: PointLight {
+//                 intensity: 1500.0,
+//                 shadows_enabled: true,
+//                 ..default()
+//             },
+//             transform: Transform::from_xyz(4.0, 8.0, 4.0),
 //             ..default()
 //         },
-//         transform: Transform::from_xyz(4.0, 8.0, 4.0),
-//         ..default()
-//     }).insert(crate::Observer);
+//         crate::Observer
+//     ));
 // }
 
 // fn setup_physics( 
@@ -49,31 +55,20 @@
 //     mut materials: ResMut<Assets<StandardMaterial>>,
 // ) {
 //     /* Create the ground. */
-//     commands.spawn_bundle(PbrBundle {
+//     commands.spawn((
+//         PbrBundle {
 //             mesh: meshes.add(Mesh::from(shape::Plane { size: 1000.0 })),
 //             material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
 //             transform: Transform::from_xyz(0., -10., 0.),
 //             ..default()
-//         })
-//         .insert(Collider::cuboid(100.0, 0.1, 100.0))
-//         .insert(Restitution::coefficient(0.0))
-//         .insert(Friction::coefficient(3.0))
-//         // .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)))
-//         .insert(crate::Observer);
+//         },
+//         Collider::cuboid(100.0, 0.1, 100.0),
+//         Restitution::coefficient(0.0),
+//         Friction::coefficient(3.0),
+//         TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
+//         crate::Observer,
+//     ));
 
-//     /* Create the bouncing ball. */
-//     // commands.spawn_bundle(PbrBundle {
-//     //         mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-//     //         material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-//     //         transform: Transform::from_xyz(0.0, 5.0, 0.0),
-//     //         ..default()
-//     //     })
-//     //     .insert(RigidBody::Dynamic)
-//     //     .insert(Collider::ball(0.5))
-//     //     .insert(Restitution::coefficient(1.0))
-//     //     // .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 4.0, 0.0)))
-//     //     .insert(crate::Observer);
-        
 // }
 
 

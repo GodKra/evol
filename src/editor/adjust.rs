@@ -26,7 +26,7 @@ pub fn adjust_control(
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
         let Some(window) = windows.get_primary_mut() else {
-            panic!("{}", Errors::WindowError);
+            panic!("{}", Errors::Window);
         };
         window.set_cursor_grab_mode(bevy::window::CursorGrabMode::None);
         window.set_cursor_visibility(true);
@@ -34,7 +34,7 @@ pub fn adjust_control(
     }
     let joint = entity_selected.get().unwrap();
     let Ok(mut editable) = editable_query.get_mut(joint) else {
-        panic!("{}", Errors::ComponentMissingError("Editable", joint));
+        panic!("{}", Errors::ComponentMissing("Editable", joint));
     };
     let (cam, cam_transform) = cam_query.single();
 
@@ -52,7 +52,7 @@ pub fn adjust_control(
     match editable_mode {
         EditMode::GrabExtend => {
             let Ok(mut point) = joint_query.get_mut(joint) else {
-                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+                panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
             if point.parent.is_none() {
@@ -94,7 +94,7 @@ pub fn adjust_control(
             point.dist = len; // update internal length
 
             let Some(window) = windows.get_primary_mut() else {
-                panic!("{}", Errors::WindowError);
+                panic!("{}", Errors::Window);
             };
             window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
             window.set_cursor_visibility(false);
@@ -103,7 +103,7 @@ pub fn adjust_control(
         // both has similar logic
         EditMode::RotateFull | EditMode::GrabFull => {
             let Some(window) = windows.get_primary() else {
-                panic!("{}", Errors::WindowError);
+                panic!("{}", Errors::Window);
             };
 
             let Some(mouse_pos) = window.cursor_position() else {
@@ -166,7 +166,7 @@ pub fn adjust_control(
         },
         EditMode::GrabAxis(axis) => {
             let Ok(mut point) = joint_query.get_mut(joint) else {
-                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+                panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
             if point.parent.is_none() {
@@ -199,7 +199,7 @@ pub fn adjust_control(
             point.dist = len; // update internal length
 
             let Some(window) = windows.get_primary_mut() else {
-                panic!("{}", Errors::WindowError);
+                panic!("{}", Errors::Window);
             };
             window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
             window.set_cursor_visibility(false);
@@ -207,7 +207,7 @@ pub fn adjust_control(
         },
         EditMode::RotateAxis(axis) => {
             let Some(window) = windows.get_primary() else {
-                panic!("{}", Errors::WindowError);
+                panic!("{}", Errors::Window);
             };
 
             let Some(mouse_pos) = window.cursor_position() else {
@@ -217,7 +217,7 @@ pub fn adjust_control(
             let ray = cam.viewport_to_world(cam_transform, mouse_pos).unwrap();
 
             let Ok(point) = joint_query.get(joint) else {
-                panic!("{}", Errors::ComponentMissingError("Joint", joint));
+                panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
             if point.parent.is_none() {

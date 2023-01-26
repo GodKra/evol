@@ -63,7 +63,7 @@ pub fn cursor_control(
     }
     let joint = entity_selected.get().unwrap();
     let Ok(mut editable) = editable_q.get_mut(joint) else {
-        panic!("{}", Errors::ComponentMissingError("Editable", joint))
+        panic!("{}", Errors::ComponentMissing("Editable", joint))
     };
 
     if let Some(EditMode::Cursor) = editable.mode {
@@ -107,7 +107,7 @@ pub fn cursor_control(
                     );
                     
                     entity_selected.set(Some(SelectableEntity::Joint(new_joint)));
-                    println!("** Created joint {:?}", new_joint);
+                    println!(":: Created Joint: {:?}", new_joint);
                     selection_updated.0 = true;
                     is_grab_mode.0 = true;
                 } else {

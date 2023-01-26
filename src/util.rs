@@ -7,21 +7,21 @@ use std::hash::Hash;
 
 pub enum Errors {
     /// Errors caused when attempting to get current window. Usually for mouse cursor.
-    WindowError,
+    Window,
     /// Errors caused when a component is missing. (Component, Entity)
-    ComponentMissingError(&'static str, Entity),
+    ComponentMissing(&'static str, Entity),
     /// Errors caused when an element is missing from the ID map. (ID, EntityID)
-    IDMapIncompleteError(Option<u32>, Option<Entity>),
+    IDMapIncomplete(Option<u32>, Option<Entity>),
 }
 
 impl fmt::Display for Errors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Errors::WindowError => 
+            Errors::Window => 
                 write!(f, "WindowError: Not found"),
-            Errors::ComponentMissingError(component, entity) => 
+            Errors::ComponentMissing(component, entity) => 
                 write!(f, "ComponentMissingError: Component {:?} not found for entity {:?}", component, entity),
-            Errors::IDMapIncompleteError(id, entity) => 
+            Errors::IDMapIncomplete(id, entity) => 
                 write!(f, "IDMapIncompleteError: {:?} <> {:?}", id, entity),
         }
     }

@@ -16,7 +16,7 @@ impl Plugin for SelectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EntitySelected>()
             .init_resource::<SelectionUpdated>()
-            .init_resource::<SelectionMaterials>()
+            .init_resource::<HighlightMaterials>()
 
             .add_system(
                 joint_select
@@ -46,16 +46,17 @@ impl Plugin for SelectionPlugin {
 
 // Colors
 #[derive(Resource)]
-pub struct SelectionMaterials {
+pub struct HighlightMaterials {
     pub parent_color: Handle<StandardMaterial>,
     pub child_color: Handle<StandardMaterial>,
     pub connector_color: Handle<StandardMaterial>,
+    pub muscle_color: Handle<StandardMaterial>,
 }
 
-impl FromWorld for SelectionMaterials {
+impl FromWorld for HighlightMaterials {
     fn from_world(world: &mut World) -> Self {
         let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
-        SelectionMaterials {
+        HighlightMaterials {
             parent_color: materials.add(
                 StandardMaterial {
                     base_color: Color::rgb(1., 0.858, 0.301),
@@ -77,6 +78,13 @@ impl FromWorld for SelectionMaterials {
                     ..default()
                 }
             ),
+            muscle_color: materials.add(
+                StandardMaterial {
+                    base_color: Color::rgb(1.0, 0.29, 0.1),
+                    emissive: Color::rgba_linear(0.0, 1.0, 0.0, 1.0),
+                    ..default()
+                }
+            ),
         }
     }
 }
@@ -85,8 +93,8 @@ impl FromWorld for SelectionMaterials {
 #[derive(Debug, Clone)]
 pub enum SelectableEntity {
     Joint(Entity),
-    Connector(Entity)
-    // Muscle,
+    Connector(Entity),
+    Muscle(Entity),
 }
 
 #[derive(Debug)]
@@ -94,6 +102,7 @@ pub enum SelectionMode {
     JointParent,
     JointChild,
     Connector,
+    Muscle,
 }
 
 /// Describes selection type. None = not selected.
@@ -131,6 +140,7 @@ impl EntitySelected {
             return match selected {
                 SelectableEntity::Joint(val) => entity == *val,
                 SelectableEntity::Connector(val) => entity == *val,
+                SelectableEntity::Muscle(val) => entity == *val,
             }
         }
         false
@@ -141,6 +151,7 @@ impl EntitySelected {
             return match selected {
                 SelectableEntity::Joint(val) => Some(*val),
                 SelectableEntity::Connector(val) => Some(*val),
+                SelectableEntity::Muscle(val) => Some(*val),
             }
         }
         None
@@ -153,6 +164,12 @@ impl EntitySelected {
     }
     pub fn is_connector(&self) -> bool {
         if let Some(SelectableEntity::Connector(_)) = &self.0 {
+            return true
+        }
+        false
+    }
+    pub fn is_muscle(&self) -> bool {
+        if let Some(SelectableEntity::Muscle(_)) = &self.0 {
             return true
         }
         false
@@ -219,11 +236,15 @@ fn update_selection_type(
 
     match entity_selected.0.as_ref().unwrap() { // determines the behaviour of the highlight system.
         SelectableEntity::Joint(joint) => {
-            select_joints_recursive(&joint, true, &mut selectable_query, &child_query)
+            select_joints_recursive(joint, true, &mut selectable_query, &child_query)
         },
         SelectableEntity::Connector(conn) => {
             let mut selectable = selectable_query.get_mut(*conn).unwrap();
             selectable.select_mode = Some(SelectionMode::Connector);
+        },
+        SelectableEntity::Muscle(muscle) => {
+            let mut selectable = selectable_query.get_mut(*muscle).unwrap();
+            selectable.select_mode = Some(SelectionMode::Muscle);
         },
     }
 }
@@ -233,7 +254,7 @@ fn update_selection_type(
 /// passive
 fn highlight_selection(
     mut selection_updated: ResMut<SelectionUpdated>,
-    select_materials: Res<SelectionMaterials>,
+    select_materials: Res<HighlightMaterials>,
     joint_materials: Res<JointMaterial>,
     mut s_query: Query<(&mut Handle<StandardMaterial>, &Selectable)>,
 ) {
@@ -244,11 +265,13 @@ fn highlight_selection(
                     SelectionMode::JointParent => *material_handle = select_materials.parent_color.clone(),
                     SelectionMode::JointChild => *material_handle = select_materials.child_color.clone(),
                     SelectionMode::Connector => *material_handle = select_materials.connector_color.clone(),
+                    SelectionMode::Muscle => *material_handle = select_materials.muscle_color.clone(),
                 }
             } else {
-                match &selectable.entity_type { // Reset highlight for those not selected
-                    &SelectableEntity::Joint(_) => *material_handle = joint_materials.joint_color.clone(),
-                    &SelectableEntity::Connector(_) => *material_handle = joint_materials.connector_color.clone(),
+                match selectable.entity_type { // Reset highlight for those not selected
+                    SelectableEntity::Joint(_) => *material_handle = joint_materials.joint_color.clone(),
+                    SelectableEntity::Connector(_) => *material_handle = joint_materials.connector_color.clone(),
+                    SelectableEntity::Muscle(_) => *material_handle = joint_materials.muscle_color.clone(),
                 }
             }
         }
