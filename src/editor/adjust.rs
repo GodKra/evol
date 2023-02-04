@@ -2,12 +2,13 @@ use bevy::{prelude::*, input::{mouse::MouseMotion}};
 use crate::{
     util::*,
 };
-use super::{*, joint::*};
+use super::{*, pgraph::*};
 
 /// System to handle the movement of the joints when in Grab/Rotate edit modes.
 /// 
 /// *passive
 pub fn adjust_control(
+    pgraph: Res<PGraph>,
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     mut motion_evr: EventReader<MouseMotion>,
@@ -17,10 +18,10 @@ pub fn adjust_control(
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
     cam_query: Query<(&Camera, &GlobalTransform)>,
+    joint_query: Query<&Joint>,
     mut editable_query: Query<&mut Editable>,
-    mut joint_query: Query<&mut Joint>,
     mut transform_query: Query<&mut Transform>,
-    global_query: Query<&mut GlobalTransform, Without<Camera>>,
+    // global_query: Query<&mut GlobalTransform, Without<Camera>>,
 ) {
     if !is_adjust_mode.0 || !entity_selected.is_joint() {
         return;
@@ -32,6 +33,7 @@ pub fn adjust_control(
         window.set_cursor_visibility(true);
         return;
     }
+
     let joint = entity_selected.get().unwrap();
     let Ok(mut editable) = editable_query.get_mut(joint) else {
         panic!("{}", Errors::ComponentMissing("Editable", joint));
@@ -49,23 +51,24 @@ pub fn adjust_control(
         println!("** Editable mode missing for entity {:?}", joint);
         return;
     };
+
     match editable_mode {
         EditMode::GrabExtend => {
-            let Ok(mut point) = joint_query.get_mut(joint) else {
+            let Ok(point) = joint_query.get(joint) else {
                 panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
-            if point.parent.is_none() {
+            if pgraph.node_parent(point.node_index).is_none() {
                 editable.mode = Some(EditMode::GrabFull);
                 return;
             }
 
-            let parent = point.parent.unwrap();
-            
-            let p_transform = global_query.get(parent).unwrap().translation();
-            let j_transform = global_query.get(joint).unwrap().translation();
-            let p_pos = cam.world_to_viewport(cam_transform, p_transform);
-            let s_pos = cam.world_to_viewport(cam_transform, j_transform);
+            let parent = pgraph.node_parent_entity(point.node_index).unwrap();
+
+            let p_translation = transform_query.get(parent).unwrap().translation;
+            let mut j_transform = transform_query.get_mut(joint).unwrap();
+            let p_pos = cam.world_to_viewport(cam_transform, p_translation);
+            let s_pos = cam.world_to_viewport(cam_transform, j_transform.translation);
             if p_pos.is_none() || s_pos.is_none() {
                 return;
             }
@@ -74,24 +77,22 @@ pub fn adjust_control(
             let mouse_move = Vec2::new(mouse_move.x, -mouse_move.y); // mouse_move.y seems to be inverted
             let mv = mouse_move.dot(dir_vec.normalize());
 
-            let mut transform = transform_query.get_mut(joint).unwrap();
+            let relative_pos = j_transform.translation-p_translation;
 
-            let mut pos = transform.translation + ((mv * 0.01) * transform.translation.normalize());
+            let mut pos = relative_pos + ((mv * 0.01) * relative_pos.normalize());
             mv_cache.0 += mv * 0.01;
-
+            
             if key_input.pressed(KeyCode::LControl) {
-                pos = (mv_cache.0/2.0).round()*2.0 * transform.translation.normalize();
+                pos = (mv_cache.0/2.0).round()*2.0 * relative_pos.normalize();
             }
 
             // prevents extension to negative
-            if transform.translation.dot(pos - 2.0 * transform.translation.normalize()) < 0.0  {
-                pos = 2.0 * transform.translation.normalize();
+            if relative_pos.dot(pos - 2.0 * relative_pos.normalize()) < 0.0  {
+                pos = 2.0 * relative_pos.normalize();
                 mv_cache.0 = 2.0;
             }
-            
-            transform.translation = pos;
-            let len = transform.translation.length();
-            point.dist = len; // update internal length
+
+            j_transform.translation = pos + p_translation;
 
             let Some(window) = windows.get_primary_mut() else {
                 panic!("{}", Errors::Window);
@@ -112,22 +113,17 @@ pub fn adjust_control(
             
             let ray = cam.viewport_to_world(cam_transform, mouse_pos).unwrap();
 
-            let mut point = joint_query.get_mut(joint).unwrap();
+            let point = joint_query.get(joint).unwrap();
 
-            // no parent = root joint.
-            let parent = if point.parent.is_some() {
-                point.parent.unwrap()
-            } else {
-                joint
-            };
+            let parent = pgraph.node_parent_entity(point.node_index).unwrap_or(joint);
 
-            let parent_global = global_query.get(parent).unwrap().translation();
-            let joint_global = global_query.get(joint).unwrap().translation();
+            let p_translation = transform_query.get(parent).unwrap().translation;
+            let mut j_transform = transform_query.get_mut(joint).unwrap();
             
             // https://antongerdelan.net/opengl/raycasting.html
-            let radius = (joint_global-parent_global).length();
-            let rot_to_ray = ray.origin - parent_global;
-            let joint_to_ray = ray.origin - joint_global;
+            let radius = (j_transform.translation-p_translation).length();
+            let rot_to_ray = ray.origin - p_translation;
+            let joint_to_ray = ray.origin - j_transform.translation;
             let b = ray.direction.dot(rot_to_ray);
             let c = rot_to_ray.dot(rot_to_ray) - radius * radius;
             // rotation is spherical when within radius
@@ -143,38 +139,32 @@ pub fn adjust_control(
             // planar rotation outside radius ** TODO: fix slow movement when transitioning **
             } else {
                 let a = cam_transform.forward();
-                let b = joint_global-ray.origin;
+                let b = j_transform.translation-ray.origin;
                 let c = ray.direction;
                 // length of c at which b - c is orthogonal to a, just (Cos0 = A / H) in vectors
                 (a.dot(b)/a.length()) / (a.dot(c)/(a.length()*c.length()))
             };
-            
-            let mut joint_local = transform_query.get_mut(joint).unwrap();
 
             let ray_pos = ray.direction * len;
             let mouse_pos = ray.origin + ray_pos;
             if let Some(EditMode::GrabFull) = editable.mode {
-                let dir_vec = mouse_pos-parent_global;
-                // let pos_c = pos_cache.0;
-                // let dir_vec = Vec3::new(dir_vec.x, pos_c.y, pos_c.z);
-                joint_local.translation = dir_vec;
-                point.dist = dir_vec.length(); 
+                j_transform.translation = mouse_pos;
             } else {
-                let dir_vec = (mouse_pos-parent_global).normalize();
-                joint_local.translation = point.dist * dir_vec;
+                let dir_vec = (mouse_pos-p_translation).normalize();
+                j_transform.translation = p_translation + (radius * dir_vec);
             }
         },
         EditMode::GrabAxis(axis) => {
-            let Ok(mut point) = joint_query.get_mut(joint) else {
+            let Ok(point) = joint_query.get(joint) else {
                 panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
-            if point.parent.is_none() {
+            if pgraph.node_parent(point.node_index).is_none() {
                 editable.mode = Some(EditMode::GrabFull);
                 return;
             }
 
-            let j_transform = global_query.get(joint).unwrap().translation();
+            let j_transform = transform_query.get(joint).unwrap().translation;
             let p_pos = cam.world_to_viewport(cam_transform, j_transform + axis.to_vec());
             let s_pos = cam.world_to_viewport(cam_transform, j_transform);
             if p_pos.is_none() || s_pos.is_none() {
@@ -195,8 +185,6 @@ pub fn adjust_control(
             }
 
             transform.translation = pos;
-            let len = transform.translation.length();
-            point.dist = len; // update internal length
 
             let Some(window) = windows.get_primary_mut() else {
                 panic!("{}", Errors::Window);
@@ -220,51 +208,87 @@ pub fn adjust_control(
                 panic!("{}", Errors::ComponentMissing("Joint", joint));
             };
             
-            if point.parent.is_none() {
+            if pgraph.node_parent(point.node_index).is_none() {
                 editable.mode = Some(EditMode::GrabFull);
                 return;
             }
+    
+            let parent = pgraph.node_parent_entity(point.node_index).unwrap();
             
-            let parent = point.parent.unwrap();
+            let p = transform_query.get(parent).unwrap().translation;
             
-            let p_transform = global_query.get(parent).unwrap();
-            let j_transform = global_query.get(joint).unwrap();
-            
-            let p = p_transform.translation();
-            let j = j_transform.translation();
+            let mut j_transform = transform_query.get_mut(joint).unwrap();
+            let j = j_transform.translation;
 
-            let center = p + axis.to_vec() * (j-p).dot(axis.to_vec());
+            let relative_pos = j-p;
+            
+            if relative_pos.cross(axis.to_vec()) == Vec3::ZERO {
+                // j_transform.translation = pos_cache.0;
+                return;
+            }
+
+            let center = p + axis.to_vec() * relative_pos.dot(axis.to_vec());
             let intersection = get_intersect_plane_ray(center, axis.to_vec(), ray);
             let dir_vec = intersection - center;
 
+
             let rot = get_axis_rotation(j-center, dir_vec, axis.to_vec());
 
-            let mut joint_local = transform_query.get_mut(joint).unwrap();
-            joint_local.translation = rot * joint_local.translation;
+            j_transform.translation = p + rot * relative_pos;
         },
         _ => (),
     }
 }
 
+pub fn update_pgraph_pos(
+    mut pgraph: ResMut<PGraph>,
+    changed_q: Query<(&Joint, &Transform), Changed<Transform>>,
+) {
+    for (joint, transform) in changed_q.iter() {
+        let weight = pgraph.0.node_weight_mut(joint.node_index).unwrap();
+        weight.pos = transform.translation;
+    }
+}
+
 // passive
-/// automatically updates the rotation and scaling of the connector when joint location
+/// automatically updates the rotation and scaling of the connectors when joint location
 /// is updated
 pub fn update_connector(
-    changed_joints: Query<(&Joint, &Transform), Changed<Transform>>,
-    mut transform_q: Query<&mut Transform, Without<Joint>>,
+    pgraph: Res<PGraph>,
+    mut transform_set: ParamSet<(
+        Query<(&Joint, &Transform), Changed<Transform>>,
+        Query<&mut Transform>
+    )>,
 ) {
-    for (joint, transform) in changed_joints.iter() {
-        if joint.rotator.is_none() {
-            continue;
-        }
-        let mut rotator = transform_q.get_mut(joint.rotator.unwrap()).unwrap();
-        rotator.rotation = Quat::from_rotation_arc(Vec3::Y, transform.translation.normalize());
-        
-        let mut connector = transform_q.get_mut(joint.connector.unwrap()).unwrap();
+    let mut changed_joints: Vec<(Joint, Vec3)> = Vec::new();
+    for (joint, transform) in transform_set.p0().iter() {
+        changed_joints.push((joint.clone(), transform.translation));
+    }
+    let mut transform_q = transform_set.p1();
+    for (joint, j_translation) in changed_joints.iter() {
+        let neighbors = pgraph.0.neighbors(joint.node_index);
+        for neighbour in neighbors {
+            let edge = pgraph.0.find_edge(joint.node_index, neighbour).unwrap();
 
-        let scale = Vec3::from([1.0, joint.dist/2.0, 1.0]);
-        let rotation = Quat::default();
-        let translation = Vec3::new(0.0, joint.dist/2.0, 0.0);
-        *connector = Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation));
+            let parent = pgraph.node_to_entity(neighbour).unwrap();
+            let connector = pgraph.edge_to_entity(edge).unwrap();
+
+            let p_translation = transform_q.get(parent).unwrap().translation;
+            let mut transform = transform_q.get_mut(connector).unwrap();
+
+            let relative_pos = *j_translation-p_translation;
+            
+            let rotation = Quat::from_rotation_arc(Vec3::Y, relative_pos.normalize());
+            let scale = Vec3::from([1.0, 1.0, 1.0]);
+            let rotate = Mat4::from_scale_rotation_translation(scale, rotation, p_translation);
+            
+            let radius = relative_pos.length();
+            let scale = Vec3::from([1.0, radius/2.0, 1.0]);
+            let translation = Vec3::new(0.0, radius/2.0, 0.0);
+            let position = Mat4::from_scale_rotation_translation(scale, Quat::default(), translation);
+
+            *transform = Transform::from_matrix(rotate * position);
+
+        }
     }
 }

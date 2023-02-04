@@ -1,41 +1,22 @@
-use std::collections::HashMap;
 
 use bevy::{prelude::*};
-use bevy_mod_picking::{PickingCamera, PickableMesh};
-use serde::{Serialize, Deserialize};
+use bevy_mod_picking::{PickableMesh};
+use petgraph::stable_graph::EdgeIndex;
 
-use crate::util::{JointMaterial, JointMeshes, Errors};
+use crate::util::{JointMaterial, JointMeshes};
 
-use super::{selection::{EntitySelected, Selectable, SelectableEntity}, IsMuscleMode, joint::{Connector, IDMap, Joint}};
+use super::{selection::*, IsMuscleMode, pgraph::*};
 
 /// Component to each muscle describing its anchors. Anchor1 is always lower in index than anchor2 (to simplify saving).
 #[derive(Component, Default, Debug)]
 pub struct Muscle {
-    pub anchor1: u32,
-    pub anchor2: u32,
-}
-
-/// Component to each joint with muscles describing each muscle and its connected pair (joint).
-#[derive(Component, Default, Debug)]
-pub struct MuscleConnectors {
-    pub pair: HashMap<u32, Entity>
-}
-
-/// Serialized form of all [Muscles] components combined
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct MuscleData {
-    pub pairs: HashMap<u32, Vec<u32>>,
-}
-
-/// Struct used to store incomplete muscles (since joints are a tree structure) when deserializing [MuscleData]
-#[derive(Default, Debug)]
-pub struct MuscleHalfs {
-    pub pairs: HashMap<u32, Vec<(u32, Entity)>>,
+    pub anchor1: Option<EdgeIndex>,
+    pub anchor2: Option<EdgeIndex>,
 }
 
 /// (Joint, Muscle); describes the first anchor when creating a muscle.
 #[derive(Default, Resource)]
-pub struct MuscleRoot(Option<(Entity, Entity)>);
+pub struct MuscleRoot(Option<(EdgeIndex, Entity)>);
 
 /// Marker for Entity used to give an anchor (cursor's projected position) to muscles which does not have a second anchor
 /// **TODO: muscles should follow the cursor when anchor is set to this**
@@ -44,6 +25,7 @@ pub struct CursorAnchor;
 
 /// Creates muscles between two connectors with proper anchors. Muscle creation mode is initiated with M button.
 pub fn muscle_construct(
+    mut pgraph: ResMut<PGraph>,
     mut commands: Commands,
     meshes: Res<JointMeshes>,
     materials: Res<JointMaterial>,
@@ -51,19 +33,15 @@ pub fn muscle_construct(
     key_input: Res<Input<KeyCode>>,
     // mouse_input: Res<Input<MouseButton>>,
     entity_selected: Res<EntitySelected>,
-    mut id_map: ResMut<IDMap>,
     mut muscle_root: ResMut<MuscleRoot>,
-    added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
+    // added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
     connector_q: Query<&Connector>,
-    mut muscle_con_q: Query<&mut MuscleConnectors>,
     // anchor_q: Query<&CursorAnchor>,
     mut muscle_q: Query<&mut Muscle>,
 ) {
-    for _ in added_pick_cam.iter() { // runs only once when initializing.
-        let anchor = commands.spawn((TransformBundle::default(), CursorAnchor)).id();
-
-        id_map.0.insert(0, anchor);
-    }
+    // for _ in added_pick_cam.iter() { // runs only once when initializing.
+    //     let anchor = commands.spawn((TransformBundle::default(), CursorAnchor)).id();
+    // }
 
     if !is_muscle_mode.0 && entity_selected.is_connector() && key_input.just_pressed(KeyCode::M) { // First anchor is set
         is_muscle_mode.0 = true;
@@ -81,117 +59,101 @@ pub fn muscle_construct(
     }
 
     let connector = connector_q.get(entity_selected.get().unwrap()).unwrap(); // both unwraps are certain to work with earlier checks
-    let joint = connector.head_joint;
-    if muscle_root.0.is_none() { // No anchor set yet
-        let Some(joint_id) = id_map.0.get_by_right(&joint) else {
-            panic!("{}", Errors::IDMapIncomplete(None, Some(joint)))
-        };
+    
+    if muscle_root.0.is_none() { // No anchor set yet\
+
         let muscle = commands.spawn((
             PbrBundle {
                 mesh: meshes.connector.clone(),
                 material: materials.muscle_color.clone(),
                 ..Default::default()
             },
-            Muscle { anchor1: *joint_id, anchor2: 0 },
+            Muscle { anchor1: Some(connector.edge_index), anchor2: None },
             PickableMesh::default(),
         )).id();
         commands.entity(muscle).insert(Selectable::with_type(SelectableEntity::Muscle(muscle)));
-        muscle_root.0 = Some((joint, muscle));
+        muscle_root.0 = Some((connector.edge_index, muscle));
     } else {
-        if muscle_root.0.unwrap().0 == joint { // Root joint is selected again as second anchor
+        if muscle_root.0.unwrap().0 == connector.edge_index { // Root joint is selected again as second anchor
             return;
         }
-        let Some(joint_id) = id_map.0.get_by_right(&joint) else {
-            panic!("{}", Errors::IDMapIncomplete(None, Some(joint)))
-        };
 
         let (anchor1, muscle) = muscle_root.0.unwrap();
-        let mut muscle_comp = muscle_q.get_mut(muscle).unwrap();
+        let anchor2 = connector.edge_index;
+        let mut muscles = muscle_q.get_mut(muscle).unwrap();
         
-        muscle_comp.anchor2 = *joint_id.max(&muscle_comp.anchor1);
-        muscle_comp.anchor1 = *joint_id.min(&muscle_comp.anchor1);
+        muscles.anchor2 = Some(connector.edge_index);
 
         // Anchor1
-        let Ok(mut muscle_con) = muscle_con_q.get_mut(anchor1) else {
-            panic!("{}", Errors::ComponentMissing("MuscleConnectors", anchor1))
-        };
-        if muscle_con.pair.contains_key(joint_id) {
+        let anchor1_data = pgraph.0.edge_weight_mut(anchor1).unwrap();
+        if anchor1_data.muscles.contains_key(&anchor2) {
             println!(":: Muscle already exists");
             is_muscle_mode.0 = false;
             commands.entity(muscle).despawn();
             muscle_root.0 = None;
             return;
         }
-        muscle_con.pair.insert(*joint_id, muscle);
+        anchor1_data.muscles.insert(anchor2, muscle);
 
         // Anchor2
-        let Some(anchor1_id) = id_map.0.get_by_right(&anchor1) else {
-            panic!("{}", Errors::IDMapIncomplete(None, Some(anchor1)))
-        };
-        let Ok(mut muscle_con) = muscle_con_q.get_mut(joint) else {
-            panic!("{}", Errors::ComponentMissing("MuscleConnectors", joint))
-        };
-        muscle_con.pair.insert(*anchor1_id, muscle);
+        let anchor2_data = pgraph.0.edge_weight_mut(anchor2).unwrap();
+        anchor2_data.muscles.insert(anchor1, muscle);
 
         is_muscle_mode.0 = false;
         muscle_root.0 = None;
-        println!(":: Muscle Constructed: {:?} <> {:?}", joint_id, anchor1_id);
+        println!(":: Muscle Constructed: {:?} <> {:?}", anchor1, anchor2);
     }
 }
 
 /// Updates the transform of the muscles when they have been created or the anchors have been moved.
 pub fn update_muscles(
-    id_map: Res<IDMap>,
+    pgraph: Res<PGraph>,
     mut muscle_set: ParamSet<(
-        Query<(&Muscle, &mut Transform), Changed<Muscle>>,
-        Query<&mut Transform>,
+        Query<(&Muscle, &mut Transform), (Changed<Muscle>, Without<Joint>)>,
+        Query<(&Muscle, &mut Transform), (With<Muscle>, Without<Joint>)>,
     )>,
-    changed_connectors: Query<(Entity, &MuscleConnectors), Changed<GlobalTransform>>,
-    joint_q: Query<(&Joint, &GlobalTransform)>,
+    changed_joints: Query<&Joint, Changed<Transform>>,
+    transform_q: Query<&Transform, (Without<Muscle>, Without<Joint>)>,
 ) {
-    for (j1, connectors) in changed_connectors.iter() { // update position on joint movement
-        for (j2, muscle) in connectors.pair.iter() {
-            let Some(j2) = id_map.0.get_by_left(j2) else {
-                panic!("{}", Errors::IDMapIncomplete(Some(*j2), None))
-            };
+    for joint in changed_joints.iter() {
+        let edges = pgraph.0.edges(joint.node_index);
+        for edge in edges {
+            let e_weight = edge.weight();
+            for (_, muscle) in e_weight.muscles.iter() {
+                let mut query = muscle_set.p1();
+                let (m_data, mut m_transform) = query.get_mut(*muscle).unwrap();
+                let c1 = pgraph.edge_to_entity(m_data.anchor1.unwrap()).unwrap();
+                let c2 = pgraph.edge_to_entity(m_data.anchor2.unwrap()).unwrap();
 
-            let mut transform_q = muscle_set.p1();
-            let mut m_transform = transform_q.get_mut(*muscle).unwrap();
-            *m_transform = get_muscle_transform(j1, *j2, &joint_q);
+                *m_transform = get_muscle_transform(&transform_q, c1, c2,);
+            }
         }
     }
 
     for (muscle, mut m_transform) in muscle_set.p0().iter_mut() { // update position on newly added
-        if muscle.anchor1 == 0 || muscle.anchor2 == 0 {
+        if muscle.anchor1 == None || muscle.anchor2 == None {
             return
         }
-        let Some(j1) = id_map.0.get_by_left(&muscle.anchor1) else {
-            panic!("{}", Errors::IDMapIncomplete(Some(muscle.anchor1), None))
-        };
-        let Some(j2) = id_map.0.get_by_left(&muscle.anchor2) else {
-            panic!("{}", Errors::IDMapIncomplete(Some(muscle.anchor2), None))
-        };
 
-        *m_transform = get_muscle_transform(*j1, *j2, &joint_q,);
+        let c1 = pgraph.edge_to_entity(muscle.anchor1.unwrap()).unwrap();
+        let c2 = pgraph.edge_to_entity(muscle.anchor2.unwrap()).unwrap();
+
+        *m_transform = get_muscle_transform(&transform_q, c1, c2,);
     }
 }
 
 /// Returns the muscle transform given the two anchor joints.
 fn get_muscle_transform(
-    joint1: Entity,
-    joint2: Entity,
-    joint_transforms: &Query<(&Joint, &GlobalTransform)>,
+    transform_q: &Query<&Transform, (Without<Muscle>, Without<Joint>)>,
+    connector1: Entity,
+    connector2: Entity,
+    // joint_transforms: &Query<(&Joint, &GlobalTransform)>,
 ) -> Transform {
-    let (j1, j1_transform) = joint_transforms.get(joint1).unwrap();
-    let (j2, j2_transform) = joint_transforms.get(joint2).unwrap();
-    let (_, j1_parent) = joint_transforms.get(j1.parent.unwrap()).unwrap();
-    let (_, j2_parent) = joint_transforms.get(j2.parent.unwrap()).unwrap();
+    let c1 = transform_q.get(connector1).unwrap().translation;
+    let c2 = transform_q.get(connector2).unwrap().translation;
 
-    let j1_mid = (j1_transform.translation()+j1_parent.translation()) / 2.0;
-    let j2_mid = (j2_transform.translation()+j2_parent.translation()) / 2.0;
-
-    let translation = (j1_mid+j2_mid) / 2.0;
-    let scale = Vec3::new(0.5, j1_mid.distance(j2_mid) / 2.0, 0.5) ;
-    let rotation = Quat::from_rotation_arc(Vec3::Y, (j1_mid-translation).normalize());
+    let translation = (c1+c2) / 2.0;
+    let scale = Vec3::new(0.5, c1.distance(c2) / 2.0, 0.5) ;
+    let rotation = Quat::from_rotation_arc(Vec3::Y, (c1-translation).normalize());
     Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation))
 }

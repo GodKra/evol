@@ -1,6 +1,8 @@
 use bevy::{prelude::*};
 
-use super::{*, joint::*};
+use crate::util::Errors;
+
+use super::*;
 
 /// System to handle editor mode toggle controls and set up the appropriate
 /// resources
@@ -14,7 +16,6 @@ pub fn editor_mode_toggle(
     mut mv_cache: ResMut<MovementCache>,
     key_input: Res<Input<KeyCode>>,
     mouse_btn: Res<Input<MouseButton>>,
-    mut joint_q: Query<&mut Joint>,
     mut editable_q: Query<&mut Editable>,
     mut transform_q: Query<&mut Transform>,
 ) {
@@ -82,21 +83,11 @@ pub fn editor_mode_toggle(
                     _ => (),
                 }
             },
-            // KeyCode::F => {
-            //     match &editable.mode {
-            //         None => {
-            //             editable.mode = Some(EditMode::AOF);
-            //         },
-            //         _ => (),
-            //     }
-            // }
             KeyCode::X | KeyCode::Y | KeyCode::Z => {
                 match &editable.mode {
                     Some(mode) => {
                         let mut transform = transform_q.get_mut(joint_selected).unwrap();
                         transform.translation = pos_cache.0;
-                        let mut point = joint_q.get_mut(joint_selected).unwrap();
-                        point.dist = pos_cache.0.length();
 
                         match mode {
                             EditMode::GrabFull | EditMode::GrabAxis(_) => {
@@ -115,8 +106,6 @@ pub fn editor_mode_toggle(
                 if is_adjust_mode.0 {
                     let mut transform = transform_q.get_mut(joint_selected).unwrap();
                     transform.translation = pos_cache.0;
-                    let mut point = joint_q.get_mut(joint_selected).unwrap();
-                    point.dist = pos_cache.0.length();
                 }
 
                 is_adjust_mode.0 = false;

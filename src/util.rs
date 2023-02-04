@@ -1,9 +1,10 @@
 use bevy::{prelude::*};
+use petgraph::stable_graph::{NodeIndex, EdgeIndex};
 
 use core::fmt;
 use std::hash::Hash;
 
-
+pub const JOINT_RADIUS: f32 = 1.0;
 
 pub enum Errors {
     /// Errors caused when attempting to get current window. Usually for mouse cursor.
@@ -11,18 +12,22 @@ pub enum Errors {
     /// Errors caused when a component is missing. (Component, Entity)
     ComponentMissing(&'static str, Entity),
     /// Errors caused when an element is missing from the ID map. (ID, EntityID)
-    IDMapIncomplete(Option<u32>, Option<Entity>),
+    NodeMissing(NodeIndex),
+    /// Errors caused when an element is missing from the ID map. (ID, EntityID)
+    EdgeMissing(EdgeIndex),
 }
 
 impl fmt::Display for Errors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Errors::Window => 
-                write!(f, "WindowError: Not found"),
+                write!(f, "(Window): Window not found"),
             Errors::ComponentMissing(component, entity) => 
-                write!(f, "ComponentMissingError: Component {:?} not found for entity {:?}", component, entity),
-            Errors::IDMapIncomplete(id, entity) => 
-                write!(f, "IDMapIncompleteError: {:?} <> {:?}", id, entity),
+                write!(f, "(ComponentMissing): Component {:?} not found for entity {:?}", component, entity),
+            Errors::NodeMissing(node) => 
+                write!(f, "(NodeMissing): Node {:?} does not exist in point graph", node),
+            Errors::EdgeMissing(edge) => 
+                write!(f, "(EdgeMissing): Edge {:?} does not exist in point graph", edge),
         }
     }
 }
@@ -65,23 +70,14 @@ pub struct JointMeshes {
     pub head: Handle<Mesh>,
     pub connector: Handle<Mesh>,
     pub muscle: Handle<Mesh>,
-    // pub dof_free: Handle<Mesh>,
-    // pub dof_locked: Handle<Mesh>,
 }
 
 impl FromWorld for JointMeshes {
     fn from_world(world: &mut World) -> Self {
-        // let (dof_free, dof_locked): (Handle<Mesh>, Handle<Mesh>) = {
-        //     let asset_server = world.resource::<AssetServer>();
-        //     (
-        //         asset_server.load("models/dof_pointer.glb#Mesh0/Primitive0"),
-        //         asset_server.load("models/dof_pointer.glb#Mesh1/Primitive0")
-        //     )
-        // }; // because borrowchecker
         let mut meshes = world.resource_mut::<Assets<Mesh>>();
         JointMeshes {
             head: meshes.add(Mesh::from(shape::Icosphere {
-                radius: 1.,
+                radius: JOINT_RADIUS,
                 subdivisions: 32,
             })),
             connector: meshes.add(Mesh::from(shape::Capsule {
@@ -92,8 +88,6 @@ impl FromWorld for JointMeshes {
             muscle: meshes.add(Mesh::from(shape::Cube {
                 size: 0.2,
             })),
-            // dof_locked, 
-            // dof_free 
         }
     }
 }

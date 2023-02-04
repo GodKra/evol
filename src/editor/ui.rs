@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use iyes_loopless::prelude::*;
 
-use super::joint::*;
 use crate::{GameState, Editor};
 
 use super::*;
@@ -145,7 +144,7 @@ fn init(
 fn update_pos_info(
     entity_selected: Res<EntitySelected>,
     pos_cache: Res<PositionCache>,
-    jointq: Query<(&Joint, &Transform, &GlobalTransform, &Editable)>,
+    jointq: Query<(&Transform, &Editable)>,
     mut textq: Query<&mut Text, With<PosText>>,
 ) {
     let mut text = textq.single_mut();
@@ -156,9 +155,7 @@ fn update_pos_info(
                 // println!("UI: update_info | {:?}", jq); // not a problem
                 return;
             }
-            let (joint, ltransform, gtransform, editable) = jq.unwrap();
-            let gtranslation = gtransform.translation();
-
+            let (ltransform, editable) = jq.unwrap();
             if let Some(mode) = editable.mode.as_ref() {
                  match mode {
                     EditMode::Cursor => (),
@@ -179,16 +176,8 @@ fn update_pos_info(
             }
 
             text.sections[0].value = format!(
-                "Global  X: {:.3} | Y: {:.3} | Z: {:.3}",
-                gtranslation.x, gtranslation.y, gtranslation.z
-            );
-            text.sections[1].value = format!(
-                // Global -
-                "\nLocal   X: {:.3} | Y: {:.3} | Z: {:.3}",
+                "X: {:.3} | Y: {:.3} | Z: {:.3}",
                 ltransform.translation.x, ltransform.translation.y, ltransform.translation.z
-            );
-            text.sections[2].value = format!(
-                "\nLength  {:.3}", joint.dist
             );
         },
         None => {

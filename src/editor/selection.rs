@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_mod_picking::*;
 
-use crate::util::{JointMaterial};
+use crate::util::{JointMaterial, *};
 
-use super::*;
+use super::{*, pgraph::*};
 
 const MANAGE_SELECT_STG: &str = "manage_selection_stage";
 
@@ -47,8 +47,7 @@ impl Plugin for SelectionPlugin {
 // Colors
 #[derive(Resource)]
 pub struct HighlightMaterials {
-    pub parent_color: Handle<StandardMaterial>,
-    pub child_color: Handle<StandardMaterial>,
+    pub joint_color: Handle<StandardMaterial>,
     pub connector_color: Handle<StandardMaterial>,
     pub muscle_color: Handle<StandardMaterial>,
 }
@@ -57,17 +56,10 @@ impl FromWorld for HighlightMaterials {
     fn from_world(world: &mut World) -> Self {
         let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
         HighlightMaterials {
-            parent_color: materials.add(
+            joint_color: materials.add(
                 StandardMaterial {
                     base_color: Color::rgb(1., 0.858, 0.301),
                     emissive: Color::rgba_linear(0.521, 0.415, 0.0, 0.0),
-                    ..default()
-                }
-            ),
-            child_color: materials.add(
-                StandardMaterial {
-                    base_color: Color::rgb(0.874, 0.262, 0.003),
-                    emissive: Color::rgba_linear(0.180, 0.054, 0.0, 0.0),
                     ..default()
                 }
             ),
@@ -99,8 +91,7 @@ pub enum SelectableEntity {
 
 #[derive(Debug)]
 pub enum SelectionMode {
-    JointParent,
-    JointChild,
+    Joint,
     Connector,
     Muscle,
 }
@@ -215,13 +206,11 @@ fn joint_select(
 /// 
 /// *passive
 fn update_selection_type(
-    // joint_selected: Res<JointSelected>,
-    // conn_selected: Res<ConnectorSelected>,
+    pgraph: Res<PGraph>,
     entity_selected: Res<EntitySelected>,
     selection_updated: Res<SelectionUpdated>,
     mut selectable_query: Query<&mut Selectable>,
-    // mut changed_selectable_query: Query<&mut Selectable, Changed<Selectable>>,
-    child_query: Query<&Children>,
+    joint_q: Query<&Joint>,
 ) {
     if !selection_updated.0 {
         return;
@@ -236,7 +225,10 @@ fn update_selection_type(
 
     match entity_selected.0.as_ref().unwrap() { // determines the behaviour of the highlight system.
         SelectableEntity::Joint(joint) => {
-            select_joints_recursive(joint, true, &mut selectable_query, &child_query)
+            let mut selectable = selectable_query.get_mut(*joint).unwrap();
+            selectable.select_mode = Some(SelectionMode::Joint);
+            
+            select_parent_edge(*joint, &pgraph, &mut selectable_query, &joint_q);
         },
         SelectableEntity::Connector(conn) => {
             let mut selectable = selectable_query.get_mut(*conn).unwrap();
@@ -249,7 +241,8 @@ fn update_selection_type(
     }
 }
 
-/// System to update entity highlight based on its select_mode
+/// System to update entity highlight based on its select_mode. Runs over every selectable entity everytime
+/// selection is updated. (maybe improvable? TODO)
 /// 
 /// passive
 fn highlight_selection(
@@ -262,8 +255,8 @@ fn highlight_selection(
         for (mut material_handle, selectable) in s_query.iter_mut() {
             if let Some(select_type) = &selectable.select_mode {
                 match select_type { // Highlight selected
-                    SelectionMode::JointParent => *material_handle = select_materials.parent_color.clone(),
-                    SelectionMode::JointChild => *material_handle = select_materials.child_color.clone(),
+                    SelectionMode::Joint => *material_handle = select_materials.joint_color.clone(),
+                    // SelectionMode::JointChild => *material_handle = select_materials.child_color.clone(),
                     SelectionMode::Connector => *material_handle = select_materials.connector_color.clone(),
                     SelectionMode::Muscle => *material_handle = select_materials.muscle_color.clone(),
                 }
@@ -279,44 +272,22 @@ fn highlight_selection(
     }
 }
 
-fn select_joints_recursive(
-    joint: &Entity,
-    is_parent: bool,
+fn select_parent_edge(
+    joint: Entity,
+    pgraph: &Res<PGraph>,
     selectable_query: &mut Query<&mut Selectable>,
-    child_query: &Query<&Children>,
+    joint_q: &Query<&Joint>,
 ) {
-    // let mut selectable = if let Ok(selectable) = selectable_query.get_mut(*joint) {
-    //     selectable
-    // } else {
-    //     return;
-    // };
-    let mut selectable = selectable_query.get_mut(*joint).unwrap();
-    selectable.select_mode = if is_parent {
-        Some(SelectionMode::JointParent)
-    } else {
-        Some(SelectionMode::JointChild)
-    };
- 
-    let children = get_selectable_children(joint, selectable_query, child_query);
-    for child in children {
-        select_joints_recursive(&child, false, selectable_query, child_query);
+    let joint_data = joint_q.get(joint).unwrap();
+            
+    let pdata = pgraph.0.node_weight(joint_data.node_index).unwrap();
+    if let Some(parent) = pdata.parent {
+        let Some(edge) = pgraph.0.find_edge(joint_data.node_index, parent) else {
+            println!("edge missing between parent and joint");
+            return;
+        };
+        let conn = pgraph.edge_to_entity(edge).unwrap();
+        let mut selectable = selectable_query.get_mut(conn).unwrap();
+        selectable.select_mode = Some(SelectionMode::Connector);
     }
-}
-
-/// Returns a list of immediate children with the Selectable component.
-fn get_selectable_children(
-    joint: &Entity,
-    selectable_query: &mut Query<&mut Selectable>,
-    child_query: &Query<&Children>
-) -> Vec<Entity> {
-    let mut selectable = Vec::new();
-    let c_children = child_query.get(*joint);
-    if let Ok(children) = c_children {
-        for child in children.iter() {
-            if selectable_query.get(*child).is_ok() {
-                selectable.push(*child);
-            }
-        }
-    }
-    selectable
 }

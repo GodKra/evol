@@ -1,125 +1,26 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{prelude::*};
 
-use crate::{editor::body::Body, util::Errors};
-
-
-use super::{joint::*, muscle::{MuscleData, Muscle}};
-
-
-/// A map used to fix the out-of-order IDs (caused when adding and removing muscles) in the ID Map when saving.
-#[derive(Default, Debug)]
-struct ReplaceMap(HashMap<u32, u32>);
+use super::{pgraph::*};
 
 /// System that saves the joint structure to a data file (currently ./points.ron)
 /// 
 /// *active
 pub fn save(
-    id_map: Res<IDMap>,
-    transform_q: Query<&GlobalTransform, With<Joint>>,
-    root_q: Query<Entity, With<Root>>,
-    child_q: Query<&Children, With<Joint>>,
-    joint_q: Query<&Joint>,
-    muscle_q: Query<&Muscle>,
+    mut pgraph: ResMut<PGraph>,
 ) {
-    let root = root_q.single();
-    let mut replace_map = ReplaceMap::default();
-    // let mut muscle_data = MuscleData::default();/
-
-    let points = Point { 
-        connections: make_points(
-            &mut 1,
-            &root, 
-            &mut replace_map,
-            &id_map,
-            &child_q, 
-            &transform_q,
-            &joint_q,
-        ),
-        ..default()
-    };
-
-
-    let body = Body {
-        points,
-        muscle: make_muscles(&replace_map, &muscle_q)
-    };
-
+    for edge in pgraph.0.edge_weights_mut() {
+        edge.muscle_data = edge.muscles.keys().copied().collect();
+    }
     std::fs::write(
-        "./points.ron", 
+        "./pgraph.ron", 
         ron::ser::to_string_pretty(
-            &body, 
-            ron::ser::PrettyConfig::new()
-                .indentor(" ".to_string())
+            &pgraph.0, 
+                ron::ser::PrettyConfig::new()
+                .depth_limit(2)
+                .separate_tuple_members(true)
+                .enumerate_arrays(true)
         ).unwrap()
     ).unwrap();
 
     println!("** SAVED");
-}
-
-fn make_points(
-    index: &mut u32,
-    parent: &Entity,
-    replace_map: &mut ReplaceMap,
-    id_map: &Res<IDMap>,
-    child_q: &Query<&Children, With<Joint>>, // With<> restriction doesn't work with children?
-    transform_q: &Query<&GlobalTransform, With<Joint>>,
-    joint_q: &Query<&Joint>,
-) -> Vec<Point> {
-    let mut p = Vec::new();
-
-    let children = child_q.get(*parent);
-    if children.is_err() {
-        return Vec::new();
-    }
-    for joint in children.unwrap().iter() {
-        if !joint_q.contains(*joint) { // With<> resitriction problem
-            continue;
-        }
-        *index += 1;
-
-        let Some(stored_id) = id_map.0.get_by_right(joint) else {
-            panic!("{}", Errors::IDMapIncomplete(None, Some(*joint)))
-        };
-        replace_map.0.insert(*stored_id, *index);
-
-        let mut point = Point::default();
-        let p_transform = transform_q.get(*parent).unwrap().translation(); // always a joint
-        let s_transform = match transform_q.get(*joint) { // ignore rotator
-            Ok(t) => t.translation(),
-            Err(_) => continue,
-        };
-        let dir = s_transform - p_transform;
-        let dir = (dir * 1000.0).round() / 1000.0; // 3 d.p to make it cleaner
-        point.r_coords = (dir.x, dir.y, dir.z);
-        point.connections = make_points(
-            index, 
-            joint, 
-            replace_map, 
-            id_map,
-            child_q, 
-            transform_q, 
-            joint_q, 
-        );
-        p.push(point);
-    }
-    p
-}
-
-/// creates MuscleData from all the [Muscle]s in the scene. 
-fn make_muscles(
-    replace_map: &ReplaceMap,
-    muscle_q: &Query<&Muscle>,
-) -> MuscleData {
-    let mut muscle_vec = Vec::new();
-    for muscle in muscle_q {
-        let a1 = replace_map.0.get(&muscle.anchor1).unwrap();
-        let a2 = replace_map.0.get(&muscle.anchor2).unwrap();
-        muscle_vec.push((*a1.min(a2), *a1.max(a2))); // ordering here not necessary but keeping to make sure
-    }
-
-    let mut m = MuscleData::default();
-    for (k, v) in muscle_vec {
-        m.pairs.entry(k).or_insert_with(Vec::new).push(v)
-    }
-    m
 }

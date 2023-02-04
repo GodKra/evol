@@ -1,0 +1,26 @@
+(
+    nodes: [
+        /*[0]*/ (pos: (5.0, 10.0, 5.0), parent: Some(5)),
+        /*[1]*/ (pos: (0.0, 0.0, 10.0), parent: Some(2)),
+        /*[2]*/ (pos: (10.0, 0.0, 10.0), parent: Some(0)),
+        /*[3]*/ (pos: (10.0, 0.0, 0.0), parent: Some(4)),
+        /*[4]*/ (pos: (0.0, 0.0, 0.0), parent: Some(1)),
+        /*[5]*/ (pos: (5.0, 0.0, 5.0), parent: Some(3)),
+    ],
+    node_holes: [],
+    edge_property: undirected,
+    edges: [
+        /*[0]*/ None,
+        /*[1]*/ None,
+        /*[2]*/ None,
+        /*[3]*/ Some((3, 4, (muscle_data: [8, 7]))),
+        /*[4]*/ Some((0, 5, (muscle_data: [11]))),
+        /*[5]*/ Some((1, 2, (muscle_data: [11, 7]))),
+        /*[6]*/ None,
+        /*[7]*/ Some((4, 1, (muscle_data: [5, 3]))),
+        /*[8]*/ Some((5, 3, (muscle_data: [3]))),
+        /*[9]*/ None,
+        /*[10]*/ None,
+        /*[11]*/ Some((2, 0, (muscle_data: [5, 4]))),
+    ],
+)

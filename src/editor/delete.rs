@@ -1,78 +1,94 @@
-use bevy::{prelude::*};
+use std::collections::HashSet;
 
-use super::{selection::EntitySelected, joint::*, muscle::{Muscle, MuscleConnectors}};
+use bevy::{prelude::*};
+use petgraph::{visit::EdgeRef};
+
+use super::{selection::EntitySelected, pgraph::*, muscle::{Muscle}};
 
 /// System to handle deletion of joints and muscles
 /// 
 /// *active
 pub fn delete(
+    mut pgraph: ResMut<PGraph>,
     mut commands: Commands,
     mut entity_selected: ResMut<EntitySelected>,
-    id_map: Res<IDMap>,
-    joint_q: Query<&Joint>,
-    child_q: Query<&Children>,
+    joint_q: Query<&mut Joint>,
+    connector_q: Query<&Connector>,
     muscle_q: Query<&Muscle>,
-    mut muscle_con_q: Query<&mut MuscleConnectors>,
 ) {
-    if entity_selected.is_joint() { // delete joint
+    if entity_selected.is_joint() { // delete joint and its relatives
         let joint = entity_selected.get().unwrap();
-        let joint_info = joint_q.get(joint).unwrap();
-        delete_joints_recursive(&joint, joint_info, &mut commands, &id_map, &joint_q, &child_q, &mut muscle_con_q);
-        println!(":: Deleted Joint(s): {:?} ..", joint);
+        let joint_info = joint_q.get(joint).unwrap().clone();
+
+        let mut paired_edges = Vec::new(); // edges with muscles to edges that are deleted
+        let mut completed_muscles: HashSet<Entity> = HashSet::new(); // muscles that have already been deleted
+        let mut orphans = Vec::new(); // joints whose parents have potentially been deleted
+
+        println!(":: Deleting Joint: {:?}", joint);
+
+        for edge in pgraph.0.edges(joint_info.node_index) {
+            let muscles = &edge.weight().muscles;
+            for (opp_edge, muscle) in muscles {
+                if completed_muscles.contains(muscle) {
+                    continue;
+                }
+                paired_edges.push((*opp_edge, edge.id()));
+                commands.entity(*muscle).despawn();
+                completed_muscles.insert(*muscle);
+            }
+            let connector = pgraph.edge_to_entity(edge.id()).unwrap();
+            commands.entity(connector).despawn();
+            
+            let endpoint = if edge.source() == joint_info.node_index {
+                edge.target()
+            } else {
+                edge.source()
+            };
+            orphans.push(endpoint);
+        }
+        for (alive, dead) in paired_edges {
+            let weight = pgraph.0.edge_weight_mut(alive).unwrap();
+            weight.muscles.remove(&dead);
+        }
+        for orphan in orphans {
+            let mut weight = pgraph.0.node_weight_mut(orphan).unwrap();
+            if weight.parent == Some(joint_info.node_index) {
+                weight.parent = None;
+            }
+        }
+        commands.entity(joint).despawn();
+        pgraph.0.remove_node(joint_info.node_index);
+
         entity_selected.set(None);
+    } else if entity_selected.is_connector() { // delete connector
+        let connector = entity_selected.get().unwrap();
+        let conn_info = connector_q.get(connector).unwrap();
+        let weight = pgraph.0.edge_weight(conn_info.edge_index).unwrap().clone();
+        for (opp_edge, muscle) in weight.muscles.iter() {
+            let opp_weight = pgraph.0.edge_weight_mut(*opp_edge).unwrap();
+            opp_weight.muscles.remove(&conn_info.edge_index);
+            commands.entity(*muscle).despawn();
+        }
+        let (j1, j2) = pgraph.0.edge_endpoints(conn_info.edge_index).unwrap();
+        if pgraph.0.node_weight(j1).unwrap().parent == Some(j2) {
+            pgraph.0.node_weight_mut(j1).unwrap().parent = None;
+        }
+        if pgraph.0.node_weight(j2).unwrap().parent == Some(j1) {
+            pgraph.0.node_weight_mut(j2).unwrap().parent = None;
+        }
+        pgraph.0.remove_edge(conn_info.edge_index);
+        println!(":: Deleting Joint: {:?}", connector);
+        commands.entity(connector).despawn();
     } else if entity_selected.is_muscle() { // delete muscle
         let muscle = entity_selected.get().unwrap();
         let muscle_info = muscle_q.get(muscle).unwrap();
-        let a1 = id_map.0.get_by_left(&muscle_info.anchor1).unwrap();
-        let a2 = id_map.0.get_by_left(&muscle_info.anchor2).unwrap();
-
-        let mut a1_m = muscle_con_q.get_mut(*a1).unwrap();
-        a1_m.pair.remove(&muscle_info.anchor2);
-        
-        let mut a2_m = muscle_con_q.get_mut(*a2).unwrap();
-        a2_m.pair.remove(&muscle_info.anchor1);
+        let a1 = pgraph.0.edge_weight_mut(muscle_info.anchor1.unwrap()).unwrap();
+        a1.muscles.remove(&muscle_info.anchor2.unwrap());
+        let a2 = pgraph.0.edge_weight_mut(muscle_info.anchor2.unwrap()).unwrap();
+        a2.muscles.remove(&muscle_info.anchor1.unwrap());
 
         commands.entity(muscle).despawn();
         println!(":: Deleted Muscle: {:?}", muscle);
         entity_selected.set(None);
-    }
-}
-
-/// deletes a joint and all entities relying on the existence of the joint (muscles, connectors, rotators, and children joints)
-fn delete_joints_recursive(
-    joint: &Entity,
-    joint_info: &Joint,
-    commands: &mut Commands,
-    id_map: &Res<IDMap>,
-    joint_q: &Query<&Joint>,
-    child_q: &Query<&Children>,
-    muscle_con_q: &mut Query<&mut MuscleConnectors>,
-) {
-    let muscle_info = muscle_con_q.get(*joint).unwrap();
-
-    for (id, muscle) in muscle_info.pair.clone().iter() { // clone workaround for borrowchecker
-        commands.entity(*muscle).despawn();
-        let pair_joint = id_map.0.get_by_left(id).unwrap();
-        let mut pair_info = muscle_con_q.get_mut(*pair_joint).unwrap();
-        pair_info.pair.remove(id_map.0.get_by_right(joint).unwrap());
-    }
-
-    if let Some(rotator) = joint_info.rotator {
-        commands.entity(rotator).despawn();
-    }
-    if let Some(connector) = joint_info.connector {
-        commands.entity(connector).despawn();
-    }
-
-    commands.entity(*joint).despawn();
-
-    let Ok(children) = child_q.get(*joint) else {
-        return;
-    };
-
-    for child in children.iter() {
-        if let Ok(joint_info) = joint_q.get(*child) {
-            delete_joints_recursive(child, joint_info, commands, id_map, joint_q, child_q, muscle_con_q);
-        }
     }
 }

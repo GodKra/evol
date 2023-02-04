@@ -1,26 +1,26 @@
 use bevy::{prelude::*, math::Affine3A};
-use bevy_mod_picking::PickingCamera;
+use bevy_mod_picking::{PickingCamera};
 use bevy_mod_raycast::Ray3d;
 
-use super::{*, joint::*};
-use crate::util::{JointMaterial, JointMeshes};
+use super::{*, pgraph::*};
+use crate::util::{JointMaterial, JointMeshes, Errors};
 /// System to handle the control of the joint addition cursor
 /// 
 /// *Passive
 pub fn cursor_control(
+    mut pgraph: ResMut<PGraph>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     joint_materials: Res<JointMaterial>,
     joint_meshes: Res<JointMeshes>,
-    mut id_counter: ResMut<IDCounter>,
-    mut id_map: ResMut<IDMap>,
     mut is_grab_mode: ResMut<IsAdjustMode>,
     mut selection_updated: ResMut<SelectionUpdated>,
     mouse_input: Res<Input<MouseButton>>,
     mut entity_selected: ResMut<EntitySelected>,
     added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
     pick_cam: Query<&PickingCamera>,
+    joint_q: Query<&Joint>,
     mut editable_q: Query<&mut Editable>,
     mut cursor_query: Query<&mut GlobalTransform, With<EditCursor>>,
     mut visibility_query: Query<&mut Visibility, With<EditCursor>>,
@@ -96,15 +96,40 @@ pub fn cursor_control(
                     let len = 2.0; // default extension
 
                     let new_joint = create_joint(
-                        Some(target), 
-                        intersection.normal() * len,
-                        Some(EditMode::GrabExtend),
                         &mut commands, 
                         &joint_meshes, 
-                        &joint_materials,
-                        &mut id_map,
-                        &mut id_counter,
+                        &joint_materials, 
+                        intersection.position() + intersection.normal() * len, 
+                        None,
+                        Some(EditMode::GrabExtend),
                     );
+
+                    let parent_data = joint_q.get(joint).unwrap();
+
+                    let node = pgraph.0.add_node(
+                        Point { 
+                            entityid: Some(new_joint), 
+                            parent: Some(parent_data.node_index),
+                            pos: intersection.position() + intersection.normal() * len,
+                            ..default()
+                        }
+                    );
+                    commands.entity(new_joint).insert(Joint { node_index: node });
+
+                    let connector = create_connector(
+                        &mut commands, 
+                        &joint_meshes, 
+                        &joint_materials, 
+                        intersection.position() + intersection.normal() * len, 
+                        intersection.position() + intersection.normal() * -crate::util::JOINT_RADIUS, 
+                        None
+                    );
+
+                    let edge = pgraph.0.add_edge(node, parent_data.node_index, Connection {
+                        entityid: Some(connector),
+                        ..default()
+                    });
+                    commands.entity(connector).insert(Connector{edge_index: edge},);
                     
                     entity_selected.set(Some(SelectableEntity::Joint(new_joint)));
                     println!(":: Created Joint: {:?}", new_joint);

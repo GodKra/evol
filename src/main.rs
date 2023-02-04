@@ -25,14 +25,6 @@ pub struct Observer;
 fn main() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
-        // Set WindowDescriptor Resource to change title and size
-        // .insert_resource(WindowDescriptor {
-        //     title: "test".to_string(),
-        //     // mode: bevy::window::WindowMode::SizedFullscreen,
-        //     width: 700.,
-        //     height: 700.,
-        //     ..Default::default()
-        // })
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
                     title: "test".to_string(),

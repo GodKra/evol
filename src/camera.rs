@@ -4,13 +4,16 @@ use iyes_loopless::prelude::*;
 
 use crate::editor::selection::EntitySelected;
 
+// use crate::editor::selection::EntitySelected;
+
 pub struct PanOrbitCameraPlugin;
 
 impl Plugin for PanOrbitCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_system(pan_orbit_camera)
             .add_system(focus_selected.run_in_state(crate::GameState::Editor))
-            .add_system(limit_radius.run_in_state(crate::GameState::Observer));
+            // .add_system(limit_radius.run_in_state(crate::GameState::Observer));
+            ;
     }
 }
 
@@ -138,13 +141,13 @@ fn focus_selected(
     cam_transform.translation = cam.focus + cam_transform.rotation.mul_vec3(Vec3::new(0.0, 0.0, cam.radius));
 }
 
-fn limit_radius(
-    mut cam_q: Query<&mut PanOrbitCamera>
-) {
-    let mut cam = cam_q.single_mut();
-    cam.radius = cam.radius.min(500.);
+// fn limit_radius(
+//     mut cam_q: Query<&mut PanOrbitCamera>
+// ) {
+//     let mut cam = cam_q.single_mut();
+//     cam.radius = cam.radius.min(500.);
 
-}
+// }
 
 fn get_primary_window_size(windows: &Res<Windows>) -> Vec2 {
     let window = windows.get_primary().unwrap();

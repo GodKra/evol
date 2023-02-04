@@ -1,7 +1,7 @@
 pub mod controls;
 pub mod cursor;
 pub mod adjust;
-pub mod body;
+pub mod pgraph;
 pub mod joint;
 pub mod muscle;
 pub mod save;
@@ -12,13 +12,18 @@ pub mod ui;
 use bevy::{prelude::*};
 use bevy_mod_picking::PickingCameraBundle;
 use iyes_loopless::prelude::*;
-use crate::{util::*, editor::{joint::{IDMap, IDCounter}, muscle::MuscleRoot}};
+
+use crate::editor::joint::LinkRoot;
+use crate::editor::muscle::MuscleRoot;
+use crate::{editor::pgraph::PGraph};
+use crate::{util::*};
 
 use self::selection::*;
 
 /* EDITOR SYSTEM ORDER
-UPDATE STAGE: grab_ctrl -> crsr_ctrl -> mode_toggle -> joint_select     ->  update_pos_info
-                        <- set_dof ->                  update_connector     pointer_visibility, position_pointer
+UPDATE STAGE: adjst_ctrl -> crsr_ctrl -> mode_toggle -> joint_select     ->  muscle_construct -> update_muscles
+                                                       update_connector
+                                                       update_pgraph_pos 
             save, delete_joint
      \/
 MANAGE_SELECT STAGE: selection_type_update -> selection_highlight
@@ -26,7 +31,7 @@ MANAGE_SELECT STAGE: selection_type_update -> selection_highlight
 
 
 pub const CRSR_CTRL: &str = "cursor_control";
-pub const GRAB_CTRL: &str = "grab_control";
+pub const ADJST_CTRL: &str = "adjust_control";
 pub const MODE_TOGGLE: &str = "edit_mode_toggle";
 pub const MUSCLE_CONSTRUCT: &str = "muscle_construct";
 
@@ -72,8 +77,12 @@ impl PosAxis {
 #[derive(Default, Resource)]
 pub struct IsAdjustMode(bool);
 
+
 #[derive(Default, Resource)]
 pub struct IsMuscleMode(bool);
+
+#[derive(Default, Resource)]
+pub struct IsLinkMode(bool);
 
 /// Stores the former position of a joint when in Grab mode.
 #[derive(Default, Resource)]
@@ -104,35 +113,40 @@ impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<IsAdjustMode>()
             .init_resource::<IsMuscleMode>()
+            .init_resource::<IsLinkMode>()
             .init_resource::<PositionCache>()
             .init_resource::<MovementCache>()
-            .init_resource::<IDMap>()
-            .init_resource::<IDCounter>()
+            .init_resource::<PGraph>()
             .init_resource::<MuscleRoot>()
+            .init_resource::<LinkRoot>()
             .add_plugin(ui::EditorUiPlugin)
             .add_plugin(selection::SelectionPlugin)
 
             .add_enter_system(crate::GameState::Editor, setup)
-            .add_enter_system(crate::GameState::Editor, body::generate_structure)
+            .add_enter_system(crate::GameState::Editor, pgraph::deserialize_pgraph)
 
             .add_system(
                 self::adjust::adjust_control
                 .run_in_state(crate::GameState::Editor)
-                .label(GRAB_CTRL)
+                .label(ADJST_CTRL)
                 .before(JOINT_SELECT))
             .add_system(
                 self::cursor::cursor_control
                     .run_in_state(crate::GameState::Editor)
                     .label(CRSR_CTRL)
-                    .after(GRAB_CTRL))
+                    .after(ADJST_CTRL))
             .add_system(
                 self::controls::editor_mode_toggle
                     .run_in_state(crate::GameState::Editor)
                     .label(MODE_TOGGLE)
                     .after(CRSR_CTRL)
-                    .after(GRAB_CTRL))
+                    .after(ADJST_CTRL))
             .add_system(
                 self::adjust::update_connector
+                    .run_in_state(crate::GameState::Editor)
+                    .after(MODE_TOGGLE))
+            .add_system(
+                self::adjust::update_pgraph_pos
                     .run_in_state(crate::GameState::Editor)
                     .after(MODE_TOGGLE))
             
@@ -150,13 +164,6 @@ impl Plugin for EditorPlugin {
                     KeyControls::EDELETE.pressed(input)
                 })
             )
-            // .add_system(
-            //     self::delete::delete_muscle
-            //     .run_in_state(crate::GameState::Editor)
-            //     .run_if(|input: Res<Input<KeyCode>>| {
-            //         KeyControls::EDELETE.pressed(input)
-            //     })
-            // )
             .add_system(
                 muscle::muscle_construct
                 .run_in_state(crate::GameState::Editor)
@@ -164,10 +171,15 @@ impl Plugin for EditorPlugin {
                 .after(JOINT_SELECT)
             )
             .add_system_to_stage(
-                "manage_selection_stage", // workaround for global transforms not updating in the first stage. ** needs to be handled properly**
+                "manage_selection_stage", // this crashes in normal system order
+                joint::link_joint
+                .run_in_state(crate::GameState::Editor)
+                // .after(JOINT_SELECT)
+            )
+            .add_system_to_stage(
+                "manage_selection_stage", // because weird bug with muscles hanging when adjust is reset (FIX TODO)
                 muscle::update_muscles
                 .run_in_state(crate::GameState::Editor)
-                // .after(MUSCLE_CONSTRUCT)
             )
             ;
             println!("done editor");
@@ -176,24 +188,11 @@ impl Plugin for EditorPlugin {
 
 fn setup(
     mut commands: Commands,
-    // 
-    // mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Camera
     let translation = Vec3::new(0.0, 0.0, 10.0);
     let radius = translation.length();
 
-    // 
-
-    // commands.spawn_bundle(PbrBundle {
-    //     mesh: arrow_handle.clone(),
-    //     material: materials.add(Color::rgb(0., 0.2, 0.2).into()),
-    //     ..default()
-    // });
-
-    // let mut camera = OrthographicCameraBundle::new_3d();
-    // camera.orthographic_projection.scale = 3.0;
-    // camera.transform = Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_translation(translation)
