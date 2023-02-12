@@ -1,12 +1,10 @@
 pub mod controls;
 pub mod cursor;
 pub mod adjust;
-pub mod pgraph;
 pub mod joint;
 pub mod muscle;
 pub mod save;
 pub mod delete;
-pub mod selection;
 pub mod ui;
 
 use bevy::{prelude::*};
@@ -15,10 +13,10 @@ use iyes_loopless::prelude::*;
 
 use crate::editor::joint::LinkRoot;
 use crate::editor::muscle::MuscleRoot;
-use crate::{editor::pgraph::PGraph};
+use crate::pgraph::PGraph;
 use crate::{util::*};
 
-use self::selection::*;
+use crate::selection::*;
 
 /* EDITOR SYSTEM ORDER
 UPDATE STAGE: adjst_ctrl -> crsr_ctrl -> mode_toggle -> joint_select     ->  muscle_construct -> update_muscles
@@ -39,16 +37,17 @@ pub const MUSCLE_CONSTRUCT: &str = "muscle_construct";
 // Assets
 //
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EditMode {
     Cursor,
-    GrabFull,    GrabExtend,
+    GrabFull,
+    GrabExtend,
     GrabAxis(PosAxis),
     RotateFull,
     RotateAxis(PosAxis),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PosAxis {
     X,
     Y,
@@ -99,7 +98,7 @@ pub struct MovementCache(f32);
 #[derive(Default, Component)]
 pub struct EditCursor;
 
-#[derive(Default, Component, Debug)]
+#[derive(Default, Component, Debug, Clone, Copy)]
 pub struct Editable {
     pub mode: Option<EditMode>,
 }
@@ -120,10 +119,9 @@ impl Plugin for EditorPlugin {
             .init_resource::<MuscleRoot>()
             .init_resource::<LinkRoot>()
             .add_plugin(ui::EditorUiPlugin)
-            .add_plugin(selection::SelectionPlugin)
 
             .add_enter_system(crate::GameState::Editor, setup)
-            .add_enter_system(crate::GameState::Editor, pgraph::deserialize_pgraph)
+            .add_enter_system(crate::GameState::Editor, deserialize_pgraph)
 
             .add_system(
                 self::adjust::adjust_control
@@ -142,11 +140,11 @@ impl Plugin for EditorPlugin {
                     .after(CRSR_CTRL)
                     .after(ADJST_CTRL))
             .add_system(
-                self::adjust::update_connector
+                self::joint::update_connector
                     .run_in_state(crate::GameState::Editor)
                     .after(MODE_TOGGLE))
             .add_system(
-                self::adjust::update_pgraph_pos
+                self::joint::update_pgraph_pos
                     .run_in_state(crate::GameState::Editor)
                     .after(MODE_TOGGLE))
             
@@ -184,6 +182,18 @@ impl Plugin for EditorPlugin {
             ;
             println!("done editor");
     }
+}
+
+fn deserialize_pgraph(
+    mut commands: Commands,
+    mut graph: ResMut<PGraph>,
+    meshes: Res<JointMeshes>,
+    materials: Res<JointMaterial>,
+) {
+    let graph_data = &std::fs::read("./pgraph.ron").unwrap();
+    graph.0 = ron::de::from_bytes(graph_data).unwrap();
+    println!("** GENERATED GRAPH");
+    graph.create(&mut commands, meshes, materials, Editable { mode: None }, crate::Editor);
 }
 
 fn setup(

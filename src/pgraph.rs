@@ -4,13 +4,8 @@ use bevy_mod_picking::{PickableMesh};
 use serde::{Serialize, Deserialize};
 use petgraph::{graph::*, stable_graph::StableUnGraph};
 
-use crate::{
-    editor::{selection::*, Editable}
-};
-
+use crate::selection::*;
 use crate::util::{JointMaterial, JointMeshes, Errors};
-
-use super::{EditMode, muscle::Muscle};
 
 /// Graph describing the joints, connections and muscles.
 pub type PointGraph = StableUnGraph<Point, Connection>;
@@ -47,17 +42,27 @@ pub struct Connector {
     pub edge_index: EdgeIndex,
 }
 
+/// Component to each muscle describing its anchors.
+#[derive(Component, Default, Debug)]
+pub struct Muscle {
+    pub anchor1: Option<EdgeIndex>,
+    pub anchor2: Option<EdgeIndex>,
+}
+
 /// PointGraph struct stored as resource.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Resource)]
 pub struct PGraph(pub PointGraph);
 
 impl PGraph {
-    /// Spawns all the joints, connectors and muscles contained in the point graph.
-    pub fn create(
+    /// Spawns all the joints, connectors and muscles contained in the point graph where `joint_extras` are extra
+    /// components that may be desired to be added when deserializing the graph, and `state` is the game state where the object exists.
+    pub fn create<E: Bundle + Clone, S: Bundle + Copy>(
         &mut self,
         commands: &mut Commands,
         meshes: Res<JointMeshes>,
         materials: Res<JointMaterial>,
+        joint_extras: E,
+        state: S,
     ) {
         let nodes: Vec<NodeIndex> = self.0.node_indices().collect(); // have to do this because borrowchecker
         let mut muscles_complete: HashMap<EdgeIndex, HashMap<EdgeIndex, Entity>> = HashMap::new();
@@ -73,7 +78,8 @@ impl PGraph {
                 &materials, 
                 point_data.pos, 
                 Some(joint),
-                None,
+                joint_extras.clone(),
+                state
             );
 
             point_data.entityid = Some(e);
@@ -95,7 +101,8 @@ impl PGraph {
                 &materials, 
                 pos1, 
                 pos2, 
-                Some(connector)
+                Some(connector),
+                state
             );
             edge_data.entityid = Some(e);
 
@@ -105,17 +112,7 @@ impl PGraph {
                     edge_data.muscles.insert(*muscle_pair, *muscle);
                     continue;
                 }
-                let muscle = commands.spawn((
-                    PbrBundle {
-                        mesh: meshes.connector.clone(),
-                        material: materials.muscle_color.clone(),
-                        ..Default::default()
-                    },
-                    Muscle { anchor1: Some(edge), anchor2: Some(*muscle_pair) },
-                    PickableMesh::default(),
-                )).id();
-                commands.entity(muscle).insert(Selectable::with_type(SelectableEntity::Muscle(muscle)));
-                // muscles_complete.insert(edge, muscle);
+                let muscle = create_muscle(commands, &meshes, &materials, Some(edge), Some(*muscle_pair), state);
                 muscles_complete.entry(edge).or_insert(HashMap::new()).insert(*muscle_pair, muscle);
                 edge_data.muscles.insert(*muscle_pair, muscle);
             }
@@ -156,14 +153,16 @@ impl PGraph {
 }
 
 /// Creates a joint with the given position, joint data and edit mode. The Joint component should
-/// be manually assigned later if no joint data is passed.
-pub fn create_joint(
+/// be manually assigned later if no joint data is passed. `joint_extras` are extra components to be added if desired,
+/// and `state` is the game state where the object exists.
+pub fn create_joint<E: Bundle, S: Bundle>(
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
     pos: Vec3,
     joint_data: Option<Joint>,
-    edit_mode: Option<EditMode>,
+    joint_extras: E,
+    state: S,
 ) -> Entity {
     let e = commands.spawn(
         (
@@ -174,8 +173,8 @@ pub fn create_joint(
                 ..Default::default()
             },
             PickableMesh::default(),
-            Editable{ mode: edit_mode },
-            crate::Editor,
+            joint_extras,
+            state,
         )
     ).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Joint(e)));
@@ -186,14 +185,15 @@ pub fn create_joint(
 }
 
 /// Creates a connector between the given joint positions with the connector data. The Connector component should
-/// be manually assigned later if no connector data is passed.
-pub fn create_connector(
+/// be manually assigned later if no connector data is passed. `state` is the game state where the object exists.
+pub fn create_connector<S: Bundle>(
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
     joint1_pos: Vec3,
     joint2_pos: Vec3,
     connector_data: Option<Connector>,
+    state: S,
 ) -> Entity {
     let r_pos = joint1_pos - joint2_pos;
 
@@ -214,6 +214,7 @@ pub fn create_connector(
             ..Default::default()
         },
         PickableMesh::default(),
+        state
     )).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Connector(e)));
     if let Some(conn) = connector_data {
@@ -222,15 +223,25 @@ pub fn create_connector(
     e
 }
 
-pub fn deserialize_pgraph(
-    mut commands: Commands,
-    mut graph: ResMut<PGraph>,
-    meshes: Res<JointMeshes>,
-    materials: Res<JointMaterial>,
-) {
-    let graph_data = &std::fs::read("./pgraph.ron").unwrap();
-    graph.0 = ron::de::from_bytes(graph_data).unwrap();
-    println!("** GENERATED: {:?}", graph.0);
-    graph.create(&mut commands, meshes, materials);
-
+/// Creates a muscle with the given anchors. `state` is the game state where the object exists.
+pub fn create_muscle<S: Bundle> (
+    commands: &mut Commands,
+    meshes: &Res<JointMeshes>,
+    materials: &Res<JointMaterial>,
+    anchor1: Option<EdgeIndex>,
+    anchor2: Option<EdgeIndex>,
+    state: S,
+) -> Entity{
+    let e = commands.spawn((
+        PbrBundle {
+            mesh: meshes.connector.clone(),
+            material: materials.muscle_color.clone(),
+            ..Default::default()
+        },
+        Muscle {anchor1, anchor2},
+        PickableMesh::default(),
+        state
+    )).id();
+    commands.entity(e).insert(Selectable::with_type(SelectableEntity::Muscle(e)));
+    e
 }

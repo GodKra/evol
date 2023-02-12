@@ -5,9 +5,10 @@ use iyes_loopless::prelude::*;
 
 mod camera;
 mod editor;
+mod selection;
 mod observer;
+mod pgraph;
 mod util;
-
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum GameState {
@@ -16,10 +17,10 @@ pub enum GameState {
 }
 
 /// Marker component for entities belonging to the Editor state. All marked with this will be despawned on state change.
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct Editor;
 /// Marker component for entities belonging to the Observer state. All marked with this will be despawned on state change.
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct Observer;
 
 fn main() {
@@ -39,8 +40,9 @@ fn main() {
         .add_plugin(PickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin)
         .add_plugin(camera::PanOrbitCameraPlugin)
+        .add_plugin(selection::SelectionPlugin)
         .add_plugin(editor::EditorPlugin)
-        // .add_plugin(observer::ObserverPlugin)
+        .add_plugin(observer::ObserverPlugin)
         .init_resource::<util::JointMeshes>()
         .init_resource::<util::JointMaterial>()
         .add_exit_system(GameState::Editor, util::despawn_with::<Editor>)

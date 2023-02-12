@@ -1,6 +1,6 @@
 use bevy::{prelude::*};
 
-use super::{pgraph::*};
+use crate::pgraph::*;
 
 /// System that saves the joint structure to a data file (currently ./points.ron)
 /// 

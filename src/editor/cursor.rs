@@ -2,8 +2,8 @@ use bevy::{prelude::*, math::Affine3A};
 use bevy_mod_picking::{PickingCamera};
 use bevy_mod_raycast::Ray3d;
 
-use super::{*, pgraph::*};
-use crate::util::{JointMaterial, JointMeshes, Errors};
+use super::*;
+use crate::{util::{JointMaterial, JointMeshes, Errors}, pgraph::*};
 /// System to handle the control of the joint addition cursor
 /// 
 /// *Passive
@@ -101,7 +101,8 @@ pub fn cursor_control(
                         &joint_materials, 
                         intersection.position() + intersection.normal() * len, 
                         None,
-                        Some(EditMode::GrabExtend),
+                        Editable { mode: Some(EditMode::GrabExtend) },
+                        crate::Editor
                     );
 
                     let parent_data = joint_q.get(joint).unwrap();
@@ -122,7 +123,8 @@ pub fn cursor_control(
                         &joint_materials, 
                         intersection.position() + intersection.normal() * len, 
                         intersection.position() + intersection.normal() * -crate::util::JOINT_RADIUS, 
-                        None
+                        None,
+                        crate::Editor
                     );
 
                     let edge = pgraph.0.add_edge(node, parent_data.node_index, Connection {

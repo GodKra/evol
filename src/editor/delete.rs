@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use bevy::{prelude::*};
 use petgraph::{visit::EdgeRef};
 
-use super::{selection::EntitySelected, pgraph::*, muscle::{Muscle}};
+use crate::{pgraph::*, selection::EntitySelected};
 
 /// System to handle deletion of joints and muscles
 /// 

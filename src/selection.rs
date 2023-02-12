@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use bevy_mod_picking::*;
+// use iyes_loopless::prelude::*;
 
-use crate::util::{JointMaterial, *};
+use crate::util::{JointMaterial};
 
-use super::{*, pgraph::*};
+use crate::pgraph::*;
 
 const MANAGE_SELECT_STG: &str = "manage_selection_stage";
 
@@ -20,24 +21,27 @@ impl Plugin for SelectionPlugin {
 
             .add_system(
                 joint_select
-                .run_in_state(crate::GameState::Editor)
+                // .run_in_state(crate::GameState::Editor)
+                // .run_in_state(crate::GameState::Observer)
                 .label(JOINT_SELECT)
-                .after(MODE_TOGGLE)
-                .run_if(|input: Res<Input<MouseButton>>| {
-                    MouseControls::EINTERACT.pressed(input)
-                })
+                // .after(MODE_TOGGLE)
+                // .run_if(|input: Res<Input<MouseButton>>| {
+                //     MouseControls::EINTERACT.pressed(input)
+                // })
             )
 
             .add_stage_after(CoreStage::Update, MANAGE_SELECT_STG, SystemStage::single_threaded())
             .add_system_to_stage(
                 MANAGE_SELECT_STG, 
                 update_selection_type
-                    .run_in_state(crate::GameState::Editor)
+                    // .run_in_state(crate::GameState::Editor)
+                    // .run_in_state(crate::GameState::Observer)
                     .label(S_TYPE_UPDATE))
             .add_system_to_stage(
                 MANAGE_SELECT_STG, 
                 highlight_selection
-                    .run_in_state(crate::GameState::Editor)
+                    // .run_in_state(crate::GameState::Editor)
+                    // .run_in_state(crate::GameState::Observer)
                     .label(S_HIGHLIGHT)
                     .after(S_TYPE_UPDATE))
             ;
@@ -177,9 +181,13 @@ pub struct SelectionUpdated(pub bool);
 fn joint_select(
     mut entity_selected: ResMut<EntitySelected>,
     mut selection_updated: ResMut<SelectionUpdated>,
+    input: Res<Input<MouseButton>>,
     selectable_q: Query<&Selectable>,
     pick_cam: Query<&PickingCamera>,
 ) {
+    if !input.just_pressed(MouseButton::Left) {
+        return;
+    }
     // this should always work
     let cam = pick_cam.single();
     

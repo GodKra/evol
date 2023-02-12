@@ -1,172 +1,48 @@
-// use bevy::{prelude::*};
-// use serde::{Serialize, Deserialize};
 
-// use bevy_rapier3d::prelude::*;
+use bevy::{prelude::*};
 
-// use crate::util::{JointMaterial, JointMeshes};
+use crate::pgraph::*;
 
 
-// #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-// pub struct Point {
-//     pub r_coords: (f32, f32, f32),
-//     pub connections: Vec<Point>,
-// }
+// passive
+/// automatically updates the rotation and scaling of the connectors when joint location
+/// is updated
+pub fn update_connector(
+    pgraph: Res<PGraph>,
+    mut transform_set: ParamSet<(
+        Query<(&Joint, &Transform), Changed<Transform>>,
+        Query<&mut Transform>
+    )>,
+) {
+    let mut changed_joints: Vec<(Joint, Vec3)> = Vec::new();
+    for (joint, transform) in transform_set.p0().iter() {
+        changed_joints.push((joint.clone(), transform.translation));
+    }
+    let mut transform_q = transform_set.p1();
+    for (joint, j_translation) in changed_joints.iter() {
+        let neighbors = pgraph.0.neighbors(joint.node_index);
+        for neighbour in neighbors {
+            let edge = pgraph.0.find_edge(joint.node_index, neighbour).unwrap();
 
-// /// Physical manifestation of the Point struct.
-// #[derive(Clone, Debug, Default, Component)]
-// pub struct Joint {
-//     pub parent: Option<Entity>,
-//     pub rotator: Option<Entity>,
-//     pub connector: Option<Entity>,   
-// }
+            let parent = pgraph.node_to_entity(neighbour).unwrap();
+            let connector = pgraph.edge_to_entity(edge).unwrap();
 
-// #[derive(Component)]
-// pub struct Root;
+            let p_translation = transform_q.get(parent).unwrap().translation;
+            let mut transform = transform_q.get_mut(connector).unwrap();
 
-// impl Point {
-//     pub fn create_object(
-//         &mut self,
-//         commands: &mut Commands,
-//         meshes: &Res<JointMeshes>,
-//         materials: &Res<JointMaterial>,
-//         parent: Option<Entity>,
-//         global_pos: Vec3,
-//     ) {
-//         let pos = Vec3::new(self.r_coords.0, self.r_coords.1, self.r_coords.2);
-//         let joint = create_joint(
-//             parent, 
-//             global_pos,
-//             pos, 
-//             commands, 
-//             meshes, 
-//             materials
-//         );
-//         for connection in &mut self.connections {
-//             connection.create_object(commands, meshes, materials, Some(joint), global_pos+pos);
-//         }
-//     }
-// }
+            let relative_pos = *j_translation-p_translation;
+            
+            let rotation = Quat::from_rotation_arc(Vec3::Y, relative_pos.normalize());
+            let scale = Vec3::from([1.0, 1.0, 1.0]);
+            let rotate = Mat4::from_scale_rotation_translation(scale, rotation, p_translation);
+            
+            let radius = relative_pos.length();
+            let scale = Vec3::from([1.0, radius/2.0, 1.0]);
+            let translation = Vec3::new(0.0, radius/2.0, 0.0);
+            let position = Mat4::from_scale_rotation_translation(scale, Quat::default(), translation);
 
-// pub fn generate_mesh(
-//     mut commands: Commands,
-//     meshes: Res<JointMeshes>,
-//     materials: Res<JointMaterial>,
-// ) {
-//     let point_data = &std::fs::read("./points.ron").unwrap();
-//     // let point_data = include_bytes!("../assets/points.ron");
-//     let mut points: Point = ron::de::from_bytes(point_data).unwrap_or_default();
-//     println!("{:?}", points);
-    
-//     points.create_object(&mut commands, &meshes, &materials, None, Vec3::ZERO);
-// }
+            *transform = Transform::from_matrix(rotate * position);
 
-// /// Creates a joint with the given relative position from the given global position. A spherical joint is created
-// /// between the joint and its parent.
-// pub fn create_joint(
-//     mut parent: Option<Entity>,
-//     global_pos: Vec3,
-//     position: Vec3,
-//     commands: &mut Commands,
-//     meshes: &Res<JointMeshes>,
-//     materials: &Res<JointMaterial>,
-// ) -> Entity {
-//     let mut joint = Joint::default();
-
-//     if parent.is_none() {
-//         parent = Some(commands.spawn((
-//             PbrBundle {
-//                 mesh: meshes.head.clone(),
-//                 material: materials.joint_color.clone(),
-//                 transform: Transform::from_translation(global_pos+position),
-//                 ..Default::default()
-//             },
-//             Root,
-//             RigidBody::Dynamic,
-//             Collider::ball(1.0),
-//             Friction::coefficient(3.0),
-//             crate::Observer,
-//             joint,
-//         )).id())
-//     } else {
-//         let len = position.length();
-//         let scale = Vec3::from([1.0, 1.0, 1.0]);
-//         let rotation = Quat::from_rotation_arc(Vec3::Y, position.normalize());
-        
-//         let rotator = Some(commands.spawn((
-//             PbrBundle {
-//                 transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, Vec3::default())),
-//                 ..Default::default()
-//             },
-//             crate::Observer,
-//         )).with_children(|p| {
-//             // connector
-//             let scale = Vec3::from([1.0, len/2.0, 1.0]);
-//             let rotation = Quat::default();
-//             let translation = Vec3::new(0.0, len/2.0, 0.0);
-
-//             joint.connector = Some(p.spawn(PbrBundle {
-//                 mesh: meshes.connector.clone(),
-//                 material: materials.connector_color.clone(),
-//                 transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation)),
-//                 ..Default::default()
-//             }).id());
-//         }).id());
-//         joint.parent = parent;
-//         joint.rotator = rotator;
-
-//         let s_joint = SphericalJointBuilder::new()
-//             .local_anchor1(Vec3::ZERO)
-//             .local_anchor2(-position);
-
-//         let current = commands.spawn(PbrBundle {
-//             mesh: meshes.head.clone(),
-//             material: materials.joint_color.clone(),
-//             transform: Transform::from_translation(global_pos+position),
-//             ..Default::default()
-//         })
-//         //.insert(BoundVol::default())
-//         .insert(joint)
-//         .insert(RigidBody::Dynamic)
-//         .insert(Collider::ball(1.0))
-//         .insert(ImpulseJoint::new(parent.unwrap(), s_joint))
-//         .insert(Friction::coefficient(3.0))
-//         // .insert(Restitution::coefficient(1.0))
-//         .insert(crate::Observer)
-//         // .push_children(&[rotator.unwrap()])
-//         .id();
-
-//         // commands.entity(parent.unwrap()).push_children(&[rotator.unwrap()]);
-//         parent = Some(current);
-//     }
-//     parent.unwrap()
-// }
-
-// /// Automatically updates the visual connector between the joints.
-// pub fn update_connector(
-//     changed_joints: Query<(&Joint, Entity)>,
-//     mut transform_q: Query<&mut Transform>,
-// ) {
-//     for (joint, entity) in changed_joints.iter() {
-//         let transform = *transform_q.get(entity).unwrap();
-//         // println!("REEE");
-//         if joint.rotator.is_none() {
-//             continue;
-//         }
-
-//         let parent_t = *transform_q.get(joint.parent.unwrap()).unwrap();
-        
-//         let mut rotator = transform_q.get_mut(joint.rotator.unwrap()).unwrap();
-//         rotator.translation = parent_t.translation;
-        
-//         let j_to_p = transform.translation-parent_t.translation;
-
-//         rotator.rotation = Quat::from_rotation_arc(Vec3::Y, j_to_p.normalize());
-        
-//         let mut connector = transform_q.get_mut(joint.connector.unwrap()).unwrap();
-
-//         let scale = Vec3::from([1.0, j_to_p.length()/2.0, 1.0]);
-//         let rotation = Quat::default();
-//         let translation = Vec3::new(0.0, j_to_p.length()/2.0, 0.0);
-//         *connector = Transform::from_matrix(Mat4::from_scale_rotation_translation(scale, rotation, translation));
-//     }
-// }
+        }
+    }
+}

@@ -1,18 +1,11 @@
 
 use bevy::{prelude::*};
-use bevy_mod_picking::{PickableMesh};
 use petgraph::stable_graph::EdgeIndex;
 
-use crate::util::{JointMaterial, JointMeshes};
+use crate::{util::{JointMaterial, JointMeshes}, selection::EntitySelected};
 
-use super::{selection::*, IsMuscleMode, pgraph::*};
-
-/// Component to each muscle describing its anchors. Anchor1 is always lower in index than anchor2 (to simplify saving).
-#[derive(Component, Default, Debug)]
-pub struct Muscle {
-    pub anchor1: Option<EdgeIndex>,
-    pub anchor2: Option<EdgeIndex>,
-}
+use super::IsMuscleMode;
+use crate::pgraph::*;
 
 /// (Joint, Muscle); describes the first anchor when creating a muscle.
 #[derive(Default, Resource)]
@@ -61,17 +54,7 @@ pub fn muscle_construct(
     let connector = connector_q.get(entity_selected.get().unwrap()).unwrap(); // both unwraps are certain to work with earlier checks
     
     if muscle_root.0.is_none() { // No anchor set yet\
-
-        let muscle = commands.spawn((
-            PbrBundle {
-                mesh: meshes.connector.clone(),
-                material: materials.muscle_color.clone(),
-                ..Default::default()
-            },
-            Muscle { anchor1: Some(connector.edge_index), anchor2: None },
-            PickableMesh::default(),
-        )).id();
-        commands.entity(muscle).insert(Selectable::with_type(SelectableEntity::Muscle(muscle)));
+        let muscle = create_muscle(&mut commands, &meshes, &materials, Some(connector.edge_index), None, crate::Editor);
         muscle_root.0 = Some((connector.edge_index, muscle));
     } else {
         if muscle_root.0.unwrap().0 == connector.edge_index { // Root joint is selected again as second anchor
@@ -147,7 +130,6 @@ fn get_muscle_transform(
     transform_q: &Query<&Transform, (Without<Muscle>, Without<Joint>)>,
     connector1: Entity,
     connector2: Entity,
-    // joint_transforms: &Query<(&Joint, &GlobalTransform)>,
 ) -> Transform {
     let c1 = transform_q.get(connector1).unwrap().translation;
     let c2 = transform_q.get(connector2).unwrap().translation;

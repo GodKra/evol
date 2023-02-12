@@ -129,25 +129,31 @@ impl Control for KeyControls {
     }
 }
 
-pub enum MouseControls {
-    EINTERACT,
-}
+// pub fn pressed_key<T: KeyCode> (
+//     input: Res<Input<KeyCode>>,
+// ) -> bool {
 
-impl MouseControls {
-    pub fn to_code(&self) -> MouseButton {
-        match self {
-            Self::EINTERACT => MouseButton::Left,
-        }
-    }
-}
+// }
+
+// pub enum MouseControls {
+//     EINTERACT,
+// }
+
+// impl MouseControls {
+//     pub fn to_code(&self) -> MouseButton {
+//         match self {
+//             Self::EINTERACT => MouseButton::Left,
+//         }
+//     }
+// }
 
 
-impl Control for MouseControls {
-    type I = MouseButton;
-    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
-        kbd.just_pressed(self.to_code())
-    }
-}
+// impl Control for MouseControls {
+//     type I = MouseButton;
+//     fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
+//         kbd.just_pressed(self.to_code())
+//     }
+// }
 
 /// Despawn all entities and their children with a given component type
 pub fn despawn_with<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {

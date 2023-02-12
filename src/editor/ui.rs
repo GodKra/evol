@@ -12,7 +12,7 @@ impl Plugin for EditorUiPlugin {
             .add_system(
                 update_pos_info
                 .run_in_state(GameState::Editor)
-                .after(selection::JOINT_SELECT)
+                .after(crate::selection::JOINT_SELECT)
             )
             .add_system(
                 tbutton_interact
