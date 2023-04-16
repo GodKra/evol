@@ -48,7 +48,7 @@ pub fn cursor_control(
                 mesh: meshes.add(Mesh::from(shape::Cube { size: cube_size })),
                 material: cursor_material.clone(),
                 transform,
-                visibility: Visibility { is_visible: false },
+                visibility: Visibility::Hidden,
                 ..Default::default()
                 
             },
@@ -86,7 +86,7 @@ pub fn cursor_control(
                     *transform = Affine3A::from_mat4(transform_new * transform_move).into()
                 }
                 for mut visible in &mut visibility_query.iter_mut() {
-                    visible.is_visible = true;
+                    *visible = Visibility::Visible;
                 }
 
                 // Create new joint & transfer to grab mode
@@ -146,6 +146,6 @@ pub fn cursor_control(
 
     // reached if nothing is intersected. hides the cursor.
     for mut visible in &mut visibility_query.iter_mut() {
-        visible.is_visible = false;
+        *visible = Visibility::Hidden;
     }
 }

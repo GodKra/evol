@@ -6,11 +6,9 @@ use crate::util::{JointMaterial};
 
 use crate::pgraph::*;
 
-const MANAGE_SELECT_STG: &str = "manage_selection_stage";
-
-pub const JOINT_SELECT: &str = "joint_select";
-pub const S_TYPE_UPDATE: &str = "selection_type_update";
-pub const S_HIGHLIGHT: &str = "selection_highlight";
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+#[system_set(base)]
+pub struct PostSelection;
 
 pub struct SelectionPlugin;
 impl Plugin for SelectionPlugin {
@@ -19,32 +17,18 @@ impl Plugin for SelectionPlugin {
             .init_resource::<SelectionUpdated>()
             .init_resource::<HighlightMaterials>()
 
-            .add_system(
-                joint_select
-                // .run_in_state(crate::GameState::Editor)
-                // .run_in_state(crate::GameState::Observer)
-                .label(JOINT_SELECT)
-                // .after(MODE_TOGGLE)
-                // .run_if(|input: Res<Input<MouseButton>>| {
-                //     MouseControls::EINTERACT.pressed(input)
-                // })
+            .configure_set(
+                PostSelection
+                    .after(CoreSet::UpdateFlush)
+                    .before(CoreSet::PostUpdate)
             )
 
-            .add_stage_after(CoreStage::Update, MANAGE_SELECT_STG, SystemStage::single_threaded())
-            .add_system_to_stage(
-                MANAGE_SELECT_STG, 
-                update_selection_type
-                    // .run_in_state(crate::GameState::Editor)
-                    // .run_in_state(crate::GameState::Observer)
-                    .label(S_TYPE_UPDATE))
-            .add_system_to_stage(
-                MANAGE_SELECT_STG, 
-                highlight_selection
-                    // .run_in_state(crate::GameState::Editor)
-                    // .run_in_state(crate::GameState::Observer)
-                    .label(S_HIGHLIGHT)
-                    .after(S_TYPE_UPDATE))
-            ;
+            .add_systems((
+                joint_select,
+                apply_system_buffers.in_base_set(PostSelection),
+                update_selection_type.in_base_set(PostSelection),
+                highlight_selection.in_base_set(PostSelection),
+            ));
     }
 }
 
@@ -178,7 +162,7 @@ pub struct SelectionUpdated(pub bool);
 /// System to set the joint_selected resource when mouse clicked
 /// 
 /// *active
-fn joint_select(
+pub fn joint_select(
     mut entity_selected: ResMut<EntitySelected>,
     mut selection_updated: ResMut<SelectionUpdated>,
     input: Res<Input<MouseButton>>,

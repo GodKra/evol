@@ -9,29 +9,13 @@ pub mod ui;
 
 use bevy::{prelude::*};
 use bevy_mod_picking::PickingCameraBundle;
-use iyes_loopless::prelude::*;
 
 use crate::editor::joint::LinkRoot;
 use crate::editor::muscle::MuscleRoot;
 use crate::pgraph::PGraph;
-use crate::{util::*};
+use crate::{util::*, GameState};
 
 use crate::selection::*;
-
-/* EDITOR SYSTEM ORDER
-UPDATE STAGE: adjst_ctrl -> crsr_ctrl -> mode_toggle -> joint_select     ->  muscle_construct -> update_muscles
-                                                       update_connector
-                                                       update_pgraph_pos 
-            save, delete_joint
-     \/
-MANAGE_SELECT STAGE: selection_type_update -> selection_highlight
-*/
-
-
-pub const CRSR_CTRL: &str = "cursor_control";
-pub const ADJST_CTRL: &str = "adjust_control";
-pub const MODE_TOGGLE: &str = "edit_mode_toggle";
-pub const MUSCLE_CONSTRUCT: &str = "muscle_construct";
 
 //
 // Assets
@@ -120,67 +104,39 @@ impl Plugin for EditorPlugin {
             .init_resource::<LinkRoot>()
             .add_plugin(ui::EditorUiPlugin)
 
-            .add_enter_system(crate::GameState::Editor, setup)
-            .add_enter_system(crate::GameState::Editor, deserialize_pgraph)
-
-            .add_system(
-                self::adjust::adjust_control
-                .run_in_state(crate::GameState::Editor)
-                .label(ADJST_CTRL)
-                .before(JOINT_SELECT))
-            .add_system(
-                self::cursor::cursor_control
-                    .run_in_state(crate::GameState::Editor)
-                    .label(CRSR_CTRL)
-                    .after(ADJST_CTRL))
-            .add_system(
-                self::controls::editor_mode_toggle
-                    .run_in_state(crate::GameState::Editor)
-                    .label(MODE_TOGGLE)
-                    .after(CRSR_CTRL)
-                    .after(ADJST_CTRL))
-            .add_system(
-                self::joint::update_connector
-                    .run_in_state(crate::GameState::Editor)
-                    .after(MODE_TOGGLE))
-            .add_system(
-                self::joint::update_pgraph_pos
-                    .run_in_state(crate::GameState::Editor)
-                    .after(MODE_TOGGLE))
+            .add_systems(
+                (setup, deserialize_pgraph).in_schedule(OnEnter(crate::GameState::Editor))
+            )
             
-            .add_system(
-                self::save::save
-                .run_in_state(crate::GameState::Editor)
-                .run_if(|input: Res<Input<KeyCode>>| {
-                    KeyControls::ESAVE.pressed(input)
-                })
+            .add_systems(
+                (
+                    adjust::adjust_control,
+                    cursor::cursor_control,
+                    controls::editor_mode_toggle,
+                    joint::update_connector,
+                    joint::update_pgraph_pos,
+                    joint::link_joint,
+                    muscle::update_muscles,
+                ).chain()
+                 .in_set(OnUpdate(crate::GameState::Editor))
             )
-            .add_system(
-                self::delete::delete
-                .run_in_state(crate::GameState::Editor)
-                .run_if(|input: Res<Input<KeyCode>>| {
-                    KeyControls::EDELETE.pressed(input)
-                })
+
+            .add_systems(
+                (
+                    save::save
+                        .run_if(|input: Res<Input<KeyCode>>| {
+                            KeyControls::ESAVE.pressed(input)
+                        }),
+                    delete::delete
+                        .run_if(|input: Res<Input<KeyCode>>| {
+                            KeyControls::EDELETE.pressed(input)
+                        }),
+                    muscle::muscle_construct
+                        .after(crate::selection::joint_select),
+                ).in_set(OnUpdate(crate::GameState::Editor))
             )
-            .add_system(
-                muscle::muscle_construct
-                .run_in_state(crate::GameState::Editor)
-                .label(MUSCLE_CONSTRUCT)
-                .after(JOINT_SELECT)
-            )
-            .add_system_to_stage(
-                "manage_selection_stage", // this crashes in normal system order
-                joint::link_joint
-                .run_in_state(crate::GameState::Editor)
-                // .after(JOINT_SELECT)
-            )
-            .add_system_to_stage(
-                "manage_selection_stage", // because weird bug with muscles hanging when adjust is reset (FIX TODO)
-                muscle::update_muscles
-                .run_in_state(crate::GameState::Editor)
-            )
-            ;
-            println!("done editor");
+            
+            .add_system(crate::util::despawn_all::<crate::Editor>.in_schedule(OnExit(GameState::Editor)));
     }
 }
 

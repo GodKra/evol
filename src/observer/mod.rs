@@ -1,10 +1,9 @@
 use bevy::prelude::*;
 use bevy_mod_picking::PickingCameraBundle;
 // use bevy_mod_picking::PickingCameraBundle;
-use iyes_loopless::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::{pgraph::PGraph, util::*};
+use crate::{pgraph::PGraph, util::*, GameState};
 
 mod joint;
 mod muscle;
@@ -15,19 +14,22 @@ impl Plugin for ObserverPlugin {
         app
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(RapierDebugRenderPlugin::default())
-        .add_enter_system(crate::GameState::Observer, setup_graphics)
-        .add_enter_system(crate::GameState::Observer, setup_physics)
-        .add_enter_system(crate::GameState::Observer, deserialize_pgraph)
-        .add_enter_system(crate::GameState::Observer, setup_joint_physics.after(deserialize_pgraph))
-        .add_system(
-            joint::update_connector
-            .run_in_state(crate::GameState::Observer)
+        .add_systems(
+            (
+                setup_graphics,
+                setup_physics,
+                deserialize_pgraph,
+                setup_joint_physics.after(deserialize_pgraph)
+            ).in_schedule(OnEnter(GameState::Observer))
         )
-        .add_system(
-            muscle::update_muscles
-            .run_in_state(crate::GameState::Observer)
+        .add_systems(
+            (
+                joint::update_connector,
+                muscle::update_muscles,
+            ).in_set(OnUpdate(GameState::Observer))
         )
-        ;
+
+        .add_system(crate::util::despawn_all::<crate::Observer>.in_schedule(OnExit(GameState::Observer)));
     }
 }
 
@@ -104,7 +106,7 @@ fn setup_physics(
     /* Create the ground. */
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Plane { size: 1000.0 })),
+            mesh: meshes.add(Mesh::from(shape::Plane { size: 1000.0, ..default() })),
             material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
             transform: Transform::from_xyz(0., -5., 0.),
             ..default()

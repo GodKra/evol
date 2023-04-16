@@ -1,8 +1,6 @@
 use bevy::{prelude::*};
 use bevy_mod_picking::*;
 
-use iyes_loopless::prelude::*;
-
 mod camera;
 mod editor;
 mod selection;
@@ -10,8 +8,9 @@ mod observer;
 mod pgraph;
 mod util;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Hash, States)]
 pub enum GameState {
+    #[default]
     Editor,
     Observer,
 }
@@ -25,30 +24,25 @@ pub struct Observer;
 
 fn main() {
     App::new()
-        .insert_resource(Msaa { samples: 4 })
+        .add_state::<GameState>()
+        .insert_resource(Msaa::Sample4)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                    title: "test".to_string(),
-                    // mode: bevy::window::WindowMode::SizedFullscreen,
-                    width: 700.,
-                    height: 700.,
-                    ..default()
-                },
+            primary_window: Some(Window {
+                title: "test".to_string(),
+                resolution: (700., 700.,).into(),
+                ..default()
+            }),
             ..default()
         }))
-        .add_loopless_state(GameState::Editor)
         .add_plugin(PickingPlugin)
-        // .add_plugin(DebugCursorPickingPlugin)
         .add_plugin(camera::PanOrbitCameraPlugin)
         .add_plugin(selection::SelectionPlugin)
         .add_plugin(editor::EditorPlugin)
         .add_plugin(observer::ObserverPlugin)
         .init_resource::<util::JointMeshes>()
         .init_resource::<util::JointMaterial>()
-        .add_exit_system(GameState::Editor, util::despawn_with::<Editor>)
-        .add_enter_system(GameState::Observer, test)
-        .add_system(testbut_interact.run_in_state(GameState::Observer))
-        .add_exit_system(GameState::Observer, util::despawn_with::<Observer>)
+        .add_system(test.in_schedule(OnEnter(GameState::Observer)))
+        .add_system(testbut_interact.in_set(OnUpdate(GameState::Observer)))
         .run();
 }
 
@@ -104,7 +98,8 @@ fn test(
 
 
 fn testbut_interact(
-    mut commands: Commands,
+    // mut commands: Commands,
+    mut state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>, With<TestBut>),
@@ -114,7 +109,7 @@ fn testbut_interact(
         match *interaction {
             Interaction::Clicked => {
                 println!("Switching State to GameState::Editor");
-                commands.insert_resource(NextState(GameState::Editor));
+                state.set(GameState::Editor);
             }
             Interaction::Hovered => {
             }

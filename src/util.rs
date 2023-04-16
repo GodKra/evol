@@ -76,10 +76,10 @@ impl FromWorld for JointMeshes {
     fn from_world(world: &mut World) -> Self {
         let mut meshes = world.resource_mut::<Assets<Mesh>>();
         JointMeshes {
-            head: meshes.add(Mesh::from(shape::Icosphere {
+            head: meshes.add(Mesh::try_from(shape::Icosphere {
                 radius: JOINT_RADIUS,
                 subdivisions: 32,
-            })),
+            }).unwrap()),
             connector: meshes.add(Mesh::from(shape::Capsule {
                 depth: 1.5,
                 radius: 0.25,
@@ -156,7 +156,7 @@ impl Control for KeyControls {
 // }
 
 /// Despawn all entities and their children with a given component type
-pub fn despawn_with<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
+pub fn despawn_all<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
     for e in q.iter() {
         commands.entity(e).despawn_recursive();
     }

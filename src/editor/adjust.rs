@@ -1,4 +1,4 @@
-use bevy::{prelude::*, input::{mouse::MouseMotion}};
+use bevy::{prelude::*, input::{mouse::MouseMotion}, window::PrimaryWindow};
 use crate::{
     util::*,
 };
@@ -13,11 +13,12 @@ pub fn adjust_control(
     mouse_input: Res<Input<MouseButton>>,
     key_input: Res<Input<KeyCode>>,
     mut motion_evr: EventReader<MouseMotion>,
-    mut windows: ResMut<Windows>,
+    // mut windows: ResMut<Windows>,
     is_adjust_mode: Res<IsAdjustMode>,
     entity_selected: Res<EntitySelected>,
     pos_cache: Res<PositionCache>,
     mut mv_cache: ResMut<MovementCache>,
+    mut window_q: Query<&mut Window, With<PrimaryWindow>>,
     cam_query: Query<(&Camera, &GlobalTransform)>,
     joint_query: Query<&Joint>,
     mut editable_query: Query<&mut Editable>,
@@ -27,11 +28,11 @@ pub fn adjust_control(
     if !is_adjust_mode.0 || !entity_selected.is_joint() {
         return;
     } else if mouse_input.just_pressed(MouseButton::Left) || key_input.just_pressed(KeyCode::Escape) {
-        let Some(window) = windows.get_primary_mut() else {
+        let Ok(mut window) = window_q.get_single_mut() else {
             panic!("{}", Errors::Window);
         };
-        window.set_cursor_grab_mode(bevy::window::CursorGrabMode::None);
-        window.set_cursor_visibility(true);
+        window.cursor.visible = true;
+        window.cursor.grab_mode = bevy::window::CursorGrabMode::None;
         return;
     }
 
@@ -95,16 +96,16 @@ pub fn adjust_control(
 
             j_transform.translation = pos + p_translation;
 
-            let Some(window) = windows.get_primary_mut() else {
+            let Ok(mut window) = window_q.get_single_mut() else {
                 panic!("{}", Errors::Window);
             };
-            window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
-            window.set_cursor_visibility(false);
-            window.set_cursor_position(s_pos.unwrap());
+            window.cursor.grab_mode = bevy::window::CursorGrabMode::Locked;
+            window.cursor.visible = false;
+            window.set_cursor_position(Some(s_pos.unwrap()));
         },
         // both has similar logic
         EditMode::RotateFull | EditMode::GrabFull => {
-            let Some(window) = windows.get_primary() else {
+            let Ok(window) = window_q.get_single_mut() else {
                 panic!("{}", Errors::Window);
             };
 
@@ -187,15 +188,15 @@ pub fn adjust_control(
 
             transform.translation = pos;
 
-            let Some(window) = windows.get_primary_mut() else {
+            let Ok(mut window) = window_q.get_single_mut() else {
                 panic!("{}", Errors::Window);
             };
-            window.set_cursor_grab_mode(bevy::window::CursorGrabMode::Locked);
-            window.set_cursor_visibility(false);
-            window.set_cursor_position(s_pos.unwrap());
+            window.cursor.grab_mode = bevy::window::CursorGrabMode::Locked;
+            window.cursor.visible = false;
+            window.set_cursor_position(Some(s_pos.unwrap()));
         },
         EditMode::RotateAxis(axis) => {
-            let Some(window) = windows.get_primary() else {
+            let Ok(window) = window_q.get_single_mut() else {
                 panic!("{}", Errors::Window);
             };
 

@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.9.1" }
-bevy_mod_picking = "0.11"
-bevy_mod_raycast = "0.7"
+bevy = { version = "0.10.1" }
+bevy_mod_picking = "0.12"
+bevy_mod_raycast = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 ron = "0.8.0"
-iyes_loopless = "0.9"
-bevy_rapier3d = { version = "0.20.0", features = [ "simd-stable", "debug-render" ] }
+# iyes_loopless = "0.9"
+bevy_rapier3d = { version = "0.21.0", features = [ "simd-stable", "debug-render" ] }
 bimap = { version = "0.6.2", features = ["serde"] }
 petgraph = { version = "0.6.2", features = ["serde-1"] }
 

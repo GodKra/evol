@@ -1,6 +1,5 @@
 // Borrowed from https://erasin.wang/books/bevy-cheatbook/cookbook/pan-orbit-camera.html
-use bevy::{prelude::*, input::mouse::*, render::camera::Projection};
-use iyes_loopless::prelude::*;
+use bevy::{prelude::*, input::mouse::*, render::camera::Projection, window::PrimaryWindow};
 
 use crate::selection::EntitySelected;
 pub struct PanOrbitCameraPlugin;
@@ -8,8 +7,8 @@ pub struct PanOrbitCameraPlugin;
 impl Plugin for PanOrbitCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_system(pan_orbit_camera)
-            .add_system(focus_selected_entity.run_in_state(crate::GameState::Editor))
-            .add_system(limit_radius.run_in_state(crate::GameState::Observer))
+            .add_system(focus_selected_entity.in_set(OnUpdate(crate::GameState::Editor)))
+            .add_system(limit_radius.in_set(OnUpdate(crate::GameState::Observer)))
             ;
     }
 }
@@ -37,7 +36,7 @@ impl Default for PanOrbitCamera {
 // active
 /// Pan the camera with middle mouse click, zoom with scroll wheel, orbit with right mouse click.
 fn pan_orbit_camera(
-    windows: Res<Windows>,
+    window_q: Query<&Window, With<PrimaryWindow>>,
     mut ev_motion: EventReader<MouseMotion>,
     mut ev_scroll: EventReader<MouseWheel>,
     input_mouse: Res<Input<MouseButton>>,
@@ -78,14 +77,15 @@ fn pan_orbit_camera(
         }
 
         let mut any = false;
+        let window = window_q.single();
         if rotation_move.length_squared() > 0.0 {
             any = true;
-            let window = get_primary_window_size(&windows);
+            let window_sz = Vec2::new(window.height(), window.width());
             let delta_x = {
-                let delta = rotation_move.x / window.x * std::f32::consts::PI * 2.0;
+                let delta = rotation_move.x / window_sz.x * std::f32::consts::PI * 2.0;
                 if pan_orbit.upside_down { -delta } else { delta }
             };
-            let delta_y = rotation_move.y / window.y * std::f32::consts::PI;
+            let delta_y = rotation_move.y / window_sz.y * std::f32::consts::PI;
             let yaw = Quat::from_rotation_y(-delta_x);
             let pitch = Quat::from_rotation_x(-delta_y);
             transform.rotation = yaw * transform.rotation; // rotate around global y axis
@@ -93,9 +93,9 @@ fn pan_orbit_camera(
         } else if pan.length_squared() > 0.0 {
             any = true;
             // make panning distance independent of resolution and FOV,
-            let window = get_primary_window_size(&windows);
+            let window_sz = Vec2::new(window.height(), window.width());
             if let Projection::Perspective(projection) = projection {
-                pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window;
+                pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window_sz;
             }
             // translate by local axes
             let right = transform.rotation * Vec3::X * -pan.x;
@@ -144,9 +144,4 @@ fn limit_radius(
     let mut cam = cam_q.single_mut();
     cam.radius = cam.radius.min(500.);
 
-}
-
-fn get_primary_window_size(windows: &Res<Windows>) -> Vec2 {
-    let window = windows.get_primary().unwrap();
-    Vec2::new(window.width() as f32, window.height() as f32)
 }
