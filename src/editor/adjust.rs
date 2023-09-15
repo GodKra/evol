@@ -1,7 +1,5 @@
-use bevy::{prelude::*, input::{mouse::MouseMotion}, window::PrimaryWindow};
-use crate::{
-    util::*,
-};
+use bevy::{prelude::*, input::mouse::MouseMotion, window::PrimaryWindow};
+use crate::util::*;
 use super::*;
 use crate::pgraph::*;
 
@@ -76,7 +74,6 @@ pub fn adjust_control(
             }
 
             let dir_vec = s_pos.unwrap()-p_pos.unwrap();
-            let mouse_move = Vec2::new(mouse_move.x, -mouse_move.y); // mouse_move.y seems to be inverted
             let mv = mouse_move.dot(dir_vec.normalize());
 
             let relative_pos = j_transform.translation-p_translation;
@@ -84,7 +81,7 @@ pub fn adjust_control(
             let mut pos = relative_pos + ((mv * 0.01) * relative_pos.normalize());
             mv_cache.0 += mv * 0.01;
             
-            if key_input.pressed(KeyCode::LControl) {
+            if key_input.pressed(KeyCode::ControlLeft) {
                 pos = (mv_cache.0/2.0).round()*2.0 * relative_pos.normalize();
             }
 
@@ -174,7 +171,7 @@ pub fn adjust_control(
             }
 
             let dir_vec = s_pos.unwrap()-p_pos.unwrap();
-            let mouse_move = Vec2::new(-mouse_move.x, mouse_move.y); // mouse_move.x seems to be inverted
+            let mouse_move = Vec2::new(-mouse_move.x, -mouse_move.y); // mouse_move.x seems to be inverted
             let mv = mouse_move.dot(dir_vec.normalize());
             mv_cache.0 += mv * 0.01;
 
@@ -182,7 +179,7 @@ pub fn adjust_control(
 
             let mut pos = transform.translation + (mv * 0.02) * axis.to_vec();
 
-            if key_input.pressed(KeyCode::LControl) {
+            if key_input.pressed(KeyCode::ControlLeft) {
                 pos = pos_cache.0 + (mv_cache.0/2.0).round()*2.0 * axis.to_vec();
             }
 

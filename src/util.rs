@@ -1,4 +1,4 @@
-use bevy::{prelude::*};
+use bevy::prelude::*;
 use petgraph::stable_graph::{NodeIndex, EdgeIndex};
 
 use core::fmt;

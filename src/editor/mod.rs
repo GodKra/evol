@@ -7,8 +7,7 @@ pub mod save;
 pub mod delete;
 pub mod ui;
 
-use bevy::{prelude::*};
-use bevy_mod_picking::PickingCameraBundle;
+use bevy::prelude::*;
 
 use crate::editor::joint::LinkRoot;
 use crate::editor::muscle::MuscleRoot;
@@ -39,7 +38,7 @@ pub enum PosAxis {
 }
 
 impl PosAxis {
-    pub fn to_vec(&self) -> Vec3 {
+    pub fn to_vec(self) -> Vec3 {
         match self {
             Self::X => Vec3::X,
             Self::Y => Vec3::Y,
@@ -102,26 +101,29 @@ impl Plugin for EditorPlugin {
             .init_resource::<PGraph>()
             .init_resource::<MuscleRoot>()
             .init_resource::<LinkRoot>()
-            .add_plugin(ui::EditorUiPlugin)
+            .add_plugins(ui::EditorUiPlugin)
 
             .add_systems(
-                (setup, deserialize_pgraph).in_schedule(OnEnter(crate::GameState::Editor))
+                OnEnter(GameState::Editor),
+                (setup, deserialize_pgraph)
             )
             
             .add_systems(
+                Update,
                 (
-                    adjust::adjust_control,
+                    (adjust::adjust_control,
                     cursor::cursor_control,
                     controls::editor_mode_toggle,
                     joint::update_connector,
                     joint::update_pgraph_pos,
                     joint::link_joint,
-                    muscle::update_muscles,
-                ).chain()
-                 .in_set(OnUpdate(crate::GameState::Editor))
+                    muscle::update_muscles,).chain()
+                )
+                .run_if(in_state(GameState::Editor))
             )
 
             .add_systems(
+                Update,
                 (
                     save::save
                         .run_if(|input: Res<Input<KeyCode>>| {
@@ -132,11 +134,11 @@ impl Plugin for EditorPlugin {
                             KeyControls::EDELETE.pressed(input)
                         }),
                     muscle::muscle_construct
-                        .after(crate::selection::joint_select),
-                ).in_set(OnUpdate(crate::GameState::Editor))
+                        .after(joint_select),
+                ).run_if(in_state(GameState::Editor))
             )
             
-            .add_system(crate::util::despawn_all::<crate::Editor>.in_schedule(OnExit(GameState::Editor)));
+            .add_systems(OnExit(GameState::Editor), despawn_all::<crate::Editor>);
     }
 }
 
@@ -149,7 +151,15 @@ fn deserialize_pgraph(
     let graph_data = &std::fs::read("./pgraph.ron").unwrap();
     graph.0 = ron::de::from_bytes(graph_data).unwrap();
     println!("** GENERATED GRAPH");
-    graph.create(&mut commands, meshes, materials, Editable { mode: None }, crate::Editor);
+    graph.create(
+        &mut commands, 
+        meshes, 
+        materials, 
+        Editable { mode: None }, 
+        (), 
+        (), 
+        crate::Editor
+    );
 }
 
 fn setup(
@@ -159,13 +169,15 @@ fn setup(
     let translation = Vec3::new(0.0, 0.0, 10.0);
     let radius = translation.length();
 
+    commands.spawn((TransformBundle::default(), muscle::CursorAnchor)); // temp
+
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_translation(translation)
             .looking_at(Vec3::ZERO, Vec3::Y),
             ..Default::default()
         },
-        PickingCameraBundle::default(),
+        bevy_mod_picking::prelude::RaycastPickCamera::default(),
         crate::camera::PanOrbitCamera {
             radius,
             ..Default::default()

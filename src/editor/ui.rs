@@ -6,13 +6,24 @@ use super::*;
 pub struct EditorUiPlugin;
 impl Plugin for EditorUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(init.in_schedule(OnEnter(GameState::Editor)))
-            .add_systems(
-                (
-                    update_pos_info,
-                    tbutton_interact
-                ).in_set(OnUpdate(GameState::Editor))
-            );
+        app.add_systems(
+            Startup, 
+            init.run_if(in_state(GameState::Editor))
+        )
+        .add_systems(
+            Update,
+            (
+                update_pos_info,
+                tbutton_interact
+            ).run_if(in_state(GameState::Editor))
+        );
+        // app.add_system(init.in_schedule(OnEnter(GameState::Editor)))
+            // .add_systems(
+            //     (
+            //         update_pos_info,
+            //         tbutton_interact
+            //     ).in_set(OnUpdate(GameState::Editor))
+            // );
         // app.add_enter_system(GameState::Editor, init)
         //     .add_system(
         //         update_pos_info
@@ -47,11 +58,8 @@ fn init(
             style: Style {
                 align_self: AlignSelf::FlexEnd,
                 position_type: PositionType::Absolute,
-                position: UiRect {
-                    top: Val::Px(5.0),
-                    left: Val::Px(5.0),
-                    ..default()
-                },
+                top: Val::Px(5.0),
+                left: Val::Px(5.0),
                 ..default()
             },
             text: Text {
@@ -101,7 +109,7 @@ fn init(
     commands
         .spawn(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                // size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
                 position_type: PositionType::Absolute,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::FlexEnd,
@@ -113,7 +121,7 @@ fn init(
             parent
                 .spawn(ButtonBundle {
                     style: Style {
-                        size: Size::new(Val::Px(80.0), Val::Px(30.0)),
+                        // size: Size::new(Val::Px(80.0), Val::Px(30.0)),
                         margin: UiRect {
                             top: Val::Px(5.),
                             ..default()
@@ -202,7 +210,7 @@ fn tbutton_interact(
 ) {
     for (interaction, mut color) in interaction_query.iter_mut() {
         match *interaction {
-            Interaction::Clicked => {
+            Interaction::Pressed => {
                 *color = PRESSED_BUTTON.into();
                 println!("Switching State to GameState::Observer");
                 state.set(GameState::Observer)

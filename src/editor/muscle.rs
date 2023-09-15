@@ -1,5 +1,5 @@
 
-use bevy::{prelude::*};
+use bevy::prelude::*;
 use petgraph::stable_graph::EdgeIndex;
 
 use crate::{util::{JointMaterial, JointMeshes}, selection::EntitySelected};
@@ -54,7 +54,7 @@ pub fn muscle_construct(
     let connector = connector_q.get(entity_selected.get().unwrap()).unwrap(); // both unwraps are certain to work with earlier checks
     
     if muscle_root.0.is_none() { // No anchor set yet\
-        let muscle = create_muscle(&mut commands, &meshes, &materials, Some(connector.edge_index), None, crate::Editor);
+        let muscle = create_muscle(&mut commands, &meshes, &materials, Some(connector.edge_index), None, (), crate::Editor);
         muscle_root.0 = Some((connector.edge_index, muscle));
     } else {
         if muscle_root.0.unwrap().0 == connector.edge_index { // Root joint is selected again as second anchor
@@ -114,7 +114,7 @@ pub fn update_muscles(
     }
 
     for (muscle, mut m_transform) in muscle_set.p0().iter_mut() { // update position on newly added
-        if muscle.anchor1 == None || muscle.anchor2 == None {
+        if muscle.anchor1.is_none() || muscle.anchor2.is_none() {
             return
         }
 

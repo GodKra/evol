@@ -1,6 +1,6 @@
 
 use bevy::{prelude::*, utils::HashMap};
-use bevy_mod_picking::{PickableMesh};
+use bevy_mod_picking::prelude::*;
 use serde::{Serialize, Deserialize};
 use petgraph::{graph::*, stable_graph::StableUnGraph};
 
@@ -54,21 +54,29 @@ pub struct Muscle {
 pub struct PGraph(pub PointGraph);
 
 impl PGraph {
-    /// Spawns all the joints, connectors and muscles contained in the point graph where `joint_extras` are extra
-    /// components that may be desired to be added when deserializing the graph, and `state` is the game state where the object exists.
-    pub fn create<E: Bundle + Clone, S: Bundle + Copy>(
+    /// Spawns all the joints, connectors and muscles contained in the point graph where `#_components` are extra
+    /// components that may be desired to be added to the entities when deserializing the graph, and `state` is the game 
+    /// state where the object exists.
+    pub fn create<J, M, C, S>(
         &mut self,
         commands: &mut Commands,
         meshes: Res<JointMeshes>,
         materials: Res<JointMaterial>,
-        joint_extras: E,
+        joint_components: J,
+        conn_components: C,
+        muscle_components: M,
         state: S,
-    ) {
+    ) where 
+        J: Bundle + Clone, // joint
+        M: Bundle + Clone, // muscle
+        C: Bundle + Clone, // connector
+        S: Bundle + Copy
+    {
         let nodes: Vec<NodeIndex> = self.0.node_indices().collect(); // have to do this because borrowchecker
         let mut muscles_complete: HashMap<EdgeIndex, HashMap<EdgeIndex, Entity>> = HashMap::new();
 
         for node in nodes {
-            let mut point_data = self.0.node_weight_mut(node).unwrap();
+            let point_data = self.0.node_weight_mut(node).unwrap();
 
             let joint = Joint { node_index: node};
 
@@ -78,7 +86,7 @@ impl PGraph {
                 &materials, 
                 point_data.pos, 
                 Some(joint),
-                joint_extras.clone(),
+                joint_components.clone(),
                 state
             );
 
@@ -92,7 +100,7 @@ impl PGraph {
             let pos1 = self.0.node_weight(n1).unwrap().pos;
             let pos2 = self.0.node_weight(n2).unwrap().pos;
 
-            let mut edge_data = self.0.edge_weight_mut(edge).unwrap();
+            let edge_data = self.0.edge_weight_mut(edge).unwrap();
             let connector = Connector { edge_index: edge };
 
             let e = create_connector(
@@ -102,6 +110,7 @@ impl PGraph {
                 pos1, 
                 pos2, 
                 Some(connector),
+                conn_components.clone(),
                 state
             );
             edge_data.entityid = Some(e);
@@ -112,7 +121,15 @@ impl PGraph {
                     edge_data.muscles.insert(*muscle_pair, *muscle);
                     continue;
                 }
-                let muscle = create_muscle(commands, &meshes, &materials, Some(edge), Some(*muscle_pair), state);
+                let muscle = create_muscle(
+                    commands, 
+                    &meshes, 
+                    &materials,
+                    Some(edge),
+                    Some(*muscle_pair),
+                    muscle_components.clone(),
+                    state
+                );
                 muscles_complete.entry(edge).or_insert(HashMap::new()).insert(*muscle_pair, muscle);
                 edge_data.muscles.insert(*muscle_pair, muscle);
             }
@@ -153,15 +170,15 @@ impl PGraph {
 }
 
 /// Creates a joint with the given position, joint data and edit mode. The Joint component should
-/// be manually assigned later if no joint data is passed. `joint_extras` are extra components to be added if desired,
+/// be manually assigned later if no joint data is passed. `components` are extra components to be added if desired,
 /// and `state` is the game state where the object exists.
-pub fn create_joint<E: Bundle, S: Bundle>(
+pub fn create_joint<J: Bundle, S: Bundle>(
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
     pos: Vec3,
     joint_data: Option<Joint>,
-    joint_extras: E,
+    components: J,
     state: S,
 ) -> Entity {
     let e = commands.spawn(
@@ -172,9 +189,11 @@ pub fn create_joint<E: Bundle, S: Bundle>(
                 transform: Transform::from_translation(pos),
                 ..Default::default()
             },
-            PickableMesh::default(),
-            joint_extras,
+            components,
             state,
+            
+            PickableBundle::default(),
+            RaycastPickTarget::default(),
         )
     ).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Joint(e)));
@@ -186,13 +205,14 @@ pub fn create_joint<E: Bundle, S: Bundle>(
 
 /// Creates a connector between the given joint positions with the connector data. The Connector component should
 /// be manually assigned later if no connector data is passed. `state` is the game state where the object exists.
-pub fn create_connector<S: Bundle>(
+pub fn create_connector<C: Bundle, S: Bundle>(
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
     joint1_pos: Vec3,
     joint2_pos: Vec3,
     connector_data: Option<Connector>,
+    components: C,
     state: S,
 ) -> Entity {
     let r_pos = joint1_pos - joint2_pos;
@@ -213,8 +233,11 @@ pub fn create_connector<S: Bundle>(
             transform: Transform::from_matrix(rotate * position),
             ..Default::default()
         },
-        PickableMesh::default(),
-        state
+        components,
+        state,
+        
+        PickableBundle::default(),
+        RaycastPickTarget::default(),
     )).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Connector(e)));
     if let Some(conn) = connector_data {
@@ -223,13 +246,15 @@ pub fn create_connector<S: Bundle>(
     e
 }
 
-/// Creates a muscle with the given anchors. `state` is the game state where the object exists.
-pub fn create_muscle<S: Bundle> (
+/// Creates a muscle with the given anchors. `components` are extra components to be added if needed, 
+/// `state` is the game state where the object exists.
+pub fn create_muscle<M: Bundle, S: Bundle> (
     commands: &mut Commands,
     meshes: &Res<JointMeshes>,
     materials: &Res<JointMaterial>,
     anchor1: Option<EdgeIndex>,
     anchor2: Option<EdgeIndex>,
+    components: M,
     state: S,
 ) -> Entity{
     let e = commands.spawn((
@@ -238,9 +263,12 @@ pub fn create_muscle<S: Bundle> (
             material: materials.muscle_color.clone(),
             ..Default::default()
         },
-        Muscle {anchor1, anchor2},
-        PickableMesh::default(),
-        state
+        Muscle { anchor1, anchor2 },
+        components,
+        state,
+        
+        PickableBundle::default(),
+        RaycastPickTarget::default(),
     )).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Muscle(e)));
     e

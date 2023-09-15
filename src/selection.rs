@@ -1,14 +1,10 @@
 use bevy::prelude::*;
-use bevy_mod_picking::*;
+use bevy_mod_picking::prelude::*;
 // use iyes_loopless::prelude::*;
 
-use crate::util::{JointMaterial};
+use crate::util::JointMaterial;
 
 use crate::pgraph::*;
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-#[system_set(base)]
-pub struct PostSelection;
 
 pub struct SelectionPlugin;
 impl Plugin for SelectionPlugin {
@@ -17,18 +13,16 @@ impl Plugin for SelectionPlugin {
             .init_resource::<SelectionUpdated>()
             .init_resource::<HighlightMaterials>()
 
-            .configure_set(
-                PostSelection
-                    .after(CoreSet::UpdateFlush)
-                    .before(CoreSet::PostUpdate)
-            )
-
-            .add_systems((
-                joint_select,
-                apply_system_buffers.in_base_set(PostSelection),
-                update_selection_type.in_base_set(PostSelection),
-                highlight_selection.in_base_set(PostSelection),
-            ));
+            .add_systems(
+                PostUpdate,
+                (
+                    joint_select,
+                    (
+                        update_selection_type,
+                        highlight_selection
+                    ).chain(),
+                )
+            );
     }
 }
 
@@ -165,32 +159,27 @@ pub struct SelectionUpdated(pub bool);
 pub fn joint_select(
     mut entity_selected: ResMut<EntitySelected>,
     mut selection_updated: ResMut<SelectionUpdated>,
-    input: Res<Input<MouseButton>>,
     selectable_q: Query<&Selectable>,
-    pick_cam: Query<&PickingCamera>,
+    select_q: Query<(Entity, &PickSelection), Changed<PickSelection>>,
+    pointer_q: Query<&PointerInteraction>,
 ) {
-    if !input.just_pressed(MouseButton::Left) {
-        return;
-    }
-    // this should always work
-    let cam = pick_cam.single();
-    
-    if let Some((selected, _)) = cam.get_nearest_intersection() {
-        // does not run if selection has just been updated (for joint creation through cursor)
-        if entity_selected.contains(selected) || selection_updated.0 {
-            return;
-        }
+    for (target, select_state) in select_q.iter() {
+        let pointer = pointer_q.single();
+        if select_state.is_selected {
+            if entity_selected.contains(target) || selection_updated.0 {
+                return;
+            }
 
-        let selectable = selectable_q.get(selected).unwrap();
-        entity_selected.set(Some(selectable.entity_type.clone()));
-        selection_updated.0 = true;
-        
-        println!(":: Selected: {:?}", entity_selected.0);
-    } else if entity_selected.is_some() {
-        selection_updated.0 = true;
-        entity_selected.set(None);
-        
-        println!(":: Selected: {:?}", entity_selected.0);
+            let selectable = selectable_q.get(target).unwrap();
+            entity_selected.set(Some(selectable.entity_type.clone()));
+            selection_updated.0 = true;
+            
+            println!(":: Selected: {:?}", entity_selected.0);
+        } else if pointer.get_nearest_hit().is_none() {
+            selection_updated.0 = true;
+            entity_selected.set(None);
+            println!(":: Selected: {:?}", entity_selected.0);
+        }
     }
 }
 

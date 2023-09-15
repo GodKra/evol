@@ -1,5 +1,5 @@
 
-use bevy::{prelude::*};
+use bevy::prelude::*;
 use petgraph::stable_graph::NodeIndex;
 
 use crate::{util::{JointMaterial, JointMeshes}, selection::EntitySelected};
@@ -66,6 +66,7 @@ pub fn link_joint (
             j1_pos,
             j2_pos,
             None,
+            (),
             crate::Editor
         );
 

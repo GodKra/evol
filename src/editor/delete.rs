@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use bevy::{prelude::*};
-use petgraph::{visit::EdgeRef};
+use bevy::prelude::*;
+use petgraph::visit::EdgeRef;
 
 use crate::{pgraph::*, selection::EntitySelected};
 
@@ -51,7 +51,7 @@ pub fn delete(
             weight.muscles.remove(&dead);
         }
         for orphan in orphans {
-            let mut weight = pgraph.0.node_weight_mut(orphan).unwrap();
+            let weight = pgraph.0.node_weight_mut(orphan).unwrap();
             if weight.parent == Some(joint_info.node_index) {
                 weight.parent = None;
             }

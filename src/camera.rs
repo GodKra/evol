@@ -6,10 +6,14 @@ pub struct PanOrbitCameraPlugin;
 
 impl Plugin for PanOrbitCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(pan_orbit_camera)
-            .add_system(focus_selected_entity.in_set(OnUpdate(crate::GameState::Editor)))
-            .add_system(limit_radius.in_set(OnUpdate(crate::GameState::Observer)))
-            ;
+        app.add_systems(
+            Update,
+            (
+                pan_orbit_camera,
+                focus_selected_entity.run_if(in_state(crate::GameState::Editor)),
+                limit_radius.run_if(in_state(crate::GameState::Observer))
+            )
+        );
     }
 }
 
