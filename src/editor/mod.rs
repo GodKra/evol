@@ -1,7 +1,6 @@
 pub mod controls;
-pub mod cursor;
-pub mod adjust;
 pub mod joint;
+pub mod adjust;
 pub mod muscle;
 pub mod save;
 pub mod delete;
@@ -9,35 +8,18 @@ pub mod ui;
 
 use bevy::prelude::*;
 
-use crate::editor::joint::LinkRoot;
-use crate::editor::muscle::MuscleRoot;
-use crate::pgraph::PGraph;
-use crate::{util::*, GameState};
+use crate::structure::Structure;
+use crate::util::{despawn_all, JointMaterial, JointMeshes};
+use crate::GameState;
 
-use crate::selection::*;
-
-//
-// Assets
-//
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum EditMode {
-    Cursor,
-    GrabFull,
-    GrabExtend,
-    GrabAxis(PosAxis),
-    RotateFull,
-    RotateAxis(PosAxis),
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum PosAxis {
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum UnitAxis {
     X,
     Y,
     Z,
 }
 
-impl PosAxis {
+impl UnitAxis {
     pub fn to_vec(self) -> Vec3 {
         match self {
             Self::X => Vec3::X,
@@ -48,150 +30,118 @@ impl PosAxis {
 
     pub fn from_key(key: &KeyCode) -> Option<Self> {
         match key {
-            KeyCode::X => Some(Self::X),
-            KeyCode::Y => Some(Self::Y),
-            KeyCode::Z => Some(Self::Z),
+            KeyCode::KeyX => Some(Self::X),
+            KeyCode::KeyY => Some(Self::Y),
+            KeyCode::KeyZ => Some(Self::Z),
             _ => None,
         }
     } 
 }
 
-#[derive(Default, Resource)]
-pub struct IsAdjustMode(bool);
-
-
-#[derive(Default, Resource)]
-pub struct IsMuscleMode(bool);
-
-#[derive(Default, Resource)]
-pub struct IsLinkMode(bool);
-
-/// Stores the former position of a joint when in Grab mode.
-#[derive(Default, Resource)]
-pub struct PositionCache(Vec3);
-
-/// Stores the total movement of a joint when in grab extrude/axis mode.
-#[derive(Default, Resource)]
-pub struct MovementCache(f32);
-
-//
-// Components
-//
-
-#[derive(Default, Component)]
-pub struct EditCursor;
-
-#[derive(Default, Component, Debug, Clone, Copy)]
-pub struct Editable {
-    pub mode: Option<EditMode>,
-}
-
-//
-// Plugin
-//
-
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<IsAdjustMode>()
-            .init_resource::<IsMuscleMode>()
-            .init_resource::<IsLinkMode>()
-            .init_resource::<PositionCache>()
-            .init_resource::<MovementCache>()
-            .init_resource::<PGraph>()
-            .init_resource::<MuscleRoot>()
-            .init_resource::<LinkRoot>()
-            .add_plugins(ui::EditorUiPlugin)
+        app.init_resource::<Structure>()
+            .init_resource::<controls::EditMode>()
+            .init_resource::<controls::EditorControls>()
+
+            .add_event::<controls::ActionEvent>()
+            .add_event::<controls::CursorControlEvent>()
+            .add_event::<controls::UndoEvent>()
+            .add_event::<controls::CacheEvent>()
+            .add_event::<joint::JointAddEvent>()
+            .add_event::<joint::JointLinkEvent>()
+            .add_event::<muscle::MuscleAddEvent>()
+            .add_event::<save::SaveEvent>()
+            .add_event::<delete::DeleteEvent>()
 
             .add_systems(
-                OnEnter(GameState::Editor),
-                (setup, deserialize_pgraph)
-            )
-            
-            .add_systems(
-                Update,
-                (
-                    (adjust::adjust_control,
-                    cursor::cursor_control,
-                    controls::editor_mode_toggle,
-                    joint::update_connector,
-                    joint::update_pgraph_pos,
-                    joint::link_joint,
-                    muscle::update_muscles,).chain()
-                )
-                .run_if(in_state(GameState::Editor))
+                OnEnter(GameState::Editor), 
+                (deserialize_structure, setup)
             )
 
             .add_systems(
-                Update,
+                PreUpdate, 
                 (
-                    save::save
-                        .run_if(|input: Res<Input<KeyCode>>| {
-                            KeyControls::ESAVE.pressed(input)
-                        }),
-                    delete::delete
-                        .run_if(|input: Res<Input<KeyCode>>| {
-                            KeyControls::EDELETE.pressed(input)
-                        }),
-                    muscle::muscle_construct
-                        .after(joint_select),
+                    controls::input_to_actions, 
+                    controls::undo
                 ).run_if(in_state(GameState::Editor))
             )
+
+            .add_systems(
+                Update, 
+                (
+                    crate::camera::pan_orbit_camera,
+                    crate::camera::focus_selected_entity,
+
+                    adjust::adjust_control,
+                    joint::joint_add,
+                    joint::joint_link,
+                    muscle::muscle_construct,
+                    muscle::update_muscles,
+                ).run_if(in_state(GameState::Editor))
+            )
+
+            .add_systems(
+                PostUpdate, 
+                (
+                    controls::editor_control,
+                    joint::update_connector,
+                    joint::update_structure_pos,
+                ).run_if(in_state(GameState::Editor))
+            )
+
+            .add_observer(delete::delete)
+            .add_observer(save::save)
+
+            .add_systems(
+                OnExit(GameState::Editor), 
+                despawn_all::<crate::Editor>
+            )
             
-            .add_systems(OnExit(GameState::Editor), despawn_all::<crate::Editor>);
+            .add_plugins(ui::EditorUiPlugin);
+
+            
     }
 }
 
-fn deserialize_pgraph(
+
+fn deserialize_structure(
     mut commands: Commands,
-    mut graph: ResMut<PGraph>,
+    mut structure: ResMut<Structure>,
     meshes: Res<JointMeshes>,
     materials: Res<JointMaterial>,
 ) {
-    let graph_data = &std::fs::read("./pgraph.ron").unwrap();
-    graph.0 = ron::de::from_bytes(graph_data).unwrap();
+    let graph_data = &std::fs::read("./structure.ron").unwrap();
+    structure.0 = ron::de::from_bytes(graph_data).unwrap();
     println!("** GENERATED GRAPH");
-    graph.create(
+    structure.create(
         &mut commands, 
         meshes, 
         materials, 
-        Editable { mode: None }, 
+        (),
         (), 
         (), 
         crate::Editor
     );
 }
 
+
 fn setup(
     mut commands: Commands,
 ) {
-    // Camera
-    let translation = Vec3::new(0.0, 0.0, 10.0);
-    let radius = translation.length();
-
-    commands.spawn((TransformBundle::default(), muscle::CursorAnchor)); // temp
-
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_translation(translation)
-            .looking_at(Vec3::ZERO, Vec3::Y),
-            ..Default::default()
-        },
-        bevy_mod_picking::prelude::RaycastPickCamera::default(),
-        crate::camera::PanOrbitCamera {
-            radius,
-            ..Default::default()
-        },
+        crate::camera::PanOrbitCamera::default(),
         crate::Editor
     ));
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.3,
+        brightness: 80.0,
     });
     // Background color
     commands.insert_resource(
         ClearColor(
-            Color::rgb(0.4, 0.4, 0.4)
+            Color::srgb(0.4, 0.4, 0.4)
         )
     );
 }

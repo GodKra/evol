@@ -1,11 +1,11 @@
 use bevy::prelude::*;
-use bevy_mod_picking::*;
+use selection::SelectionPlugin;
 
 mod camera;
 mod editor;
 mod selection;
-mod observer;
-mod pgraph;
+// mod observer;
+mod structure;
 mod util;
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Hash, States)]
@@ -24,8 +24,6 @@ pub struct Observer;
 
 fn main() {
     App::new()
-        .add_state::<GameState>()
-        .insert_resource(Msaa::Sample4)
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
@@ -35,12 +33,11 @@ fn main() {
                 }),
                 ..default()
             }),
-            DefaultPickingPlugins,
-            camera::PanOrbitCameraPlugin,
-            selection::SelectionPlugin,
+            MeshPickingPlugin,
+            SelectionPlugin,
             editor::EditorPlugin,
-            observer::ObserverPlugin,
         ))
+        .init_state::<GameState>()
         .init_resource::<util::JointMeshes>()
         .init_resource::<util::JointMaterial>()
         .run();

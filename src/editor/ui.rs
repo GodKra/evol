@@ -1,14 +1,13 @@
 use bevy::prelude::*;
-use crate::{GameState, Editor};
+use crate::{selection::EntitySelected, Editor, GameState};
 
-use super::*;
 
 pub struct EditorUiPlugin;
 impl Plugin for EditorUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Startup, 
-            init.run_if(in_state(GameState::Editor))
+            OnEnter(GameState::Editor), 
+            init
         )
         .add_systems(
             Update,
@@ -17,23 +16,6 @@ impl Plugin for EditorUiPlugin {
                 tbutton_interact
             ).run_if(in_state(GameState::Editor))
         );
-        // app.add_system(init.in_schedule(OnEnter(GameState::Editor)))
-            // .add_systems(
-            //     (
-            //         update_pos_info,
-            //         tbutton_interact
-            //     ).in_set(OnUpdate(GameState::Editor))
-            // );
-        // app.add_enter_system(GameState::Editor, init)
-        //     .add_system(
-        //         update_pos_info
-        //         .run_in_state(GameState::Editor)
-        //         .after(crate::selection::JOINT_SELECT)
-        //     )
-        //     .add_system(
-        //         tbutton_interact
-        //         .run_in_state(GameState::Editor)
-        //     );
     }
 }
 
@@ -43,160 +25,89 @@ struct PosText;
 #[derive(Component)]
 struct TButton;
 
-const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
-const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.35, 0.35);
+const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
+const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.35, 0.35);
 
 fn init(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    // Position information text
-    let font = asset_server.load("fonts/FiraCode-Regular.ttf");
+    let font_handle: Handle<Font> = asset_server.load("fonts\\FiraCode-Regular.ttf");
     commands.spawn((
-        TextBundle {
-            style: Style {
-                align_self: AlignSelf::FlexEnd,
-                position_type: PositionType::Absolute,
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..default()
-            },
-            text: Text {
-                sections: vec![
-                        TextSection {
-                            value: "".to_string(),
-                            style: TextStyle {
-                                font: font.clone(),
-                                font_size: 13.0,
-                                color: Color::WHITE,
-                            },
-                        },
-                        TextSection {
-                            value: "".to_string(),
-                            style: TextStyle {
-                                font: font.clone(),
-                                font_size: 13.0,
-                                color: Color::WHITE,
-                            },
-                        },
-                        TextSection {
-                            value: "".to_string(),
-                            style: TextStyle {
-                                font: font.clone(),
-                                font_size: 13.0,
-                                color: Color::WHITE,
-                            },
-                        },
-                        TextSection {
-                            value: "".to_string(),
-                            style: TextStyle {
-                                font: font.clone(),
-                                font_size: 13.0,
-                                color: Color::WHITE,
-                            },
-                        },
-                    ],
-                ..default()
-            },
+        Text::default(),
+        TextFont {
+            font: font_handle.clone(),
+            font_size: 13.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(5.0),
+            left: Val::Px(5.0),
             ..default()
         },
         PosText,
         Editor
     ));
 
-    // Transition button
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                // size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                position_type: PositionType::Absolute,
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        Editor
+    )).with_children(|parent| {
+        parent.spawn((
+            Button,
+            Node {
+                width: Val::Px(80.0),
+                height: Val::Px(30.0),
+                margin: UiRect {
+                    top: Val::Px(5.),
+                    ..default()
+                },
                 justify_content: JustifyContent::Center,
-                align_items: AlignItems::FlexEnd,
+                align_items: AlignItems::Center,
                 ..default()
             },
-            background_color: Color::NONE.into(),
-            ..default()
-        }).with_children(|parent| {
-            parent
-                .spawn(ButtonBundle {
-                    style: Style {
-                        // size: Size::new(Val::Px(80.0), Val::Px(30.0)),
-                        margin: UiRect {
-                            top: Val::Px(5.),
-                            ..default()
-                        },
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    background_color: Color::rgb(0.15, 0.15, 0.15).into(),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn(TextBundle {
-                        text: Text::from_section(
-                            "Test",
-                            TextStyle {
-                                font: asset_server.load("fonts/FiraCode-Regular.ttf"),
-                                font_size: 15.0,
-                                color: Color::rgb(0.9, 0.9, 0.9),
-                            },
-                        ),
-                        ..default()
-                    });
-                })
-                .insert(TButton);
-        }).insert(Editor);
+            TButton,
+        )).with_child((
+            Text::new("TEST"),
+            TextFont {
+                font: font_handle.clone(),
+                font_size: 15.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+        ));
+    });
 }
 
 
 /// System to update top left coordinate/position information.
-/// 
-/// *passive
 fn update_pos_info(
     entity_selected: Res<EntitySelected>,
-    pos_cache: Res<PositionCache>,
-    jointq: Query<(&Transform, &Editable)>,
-    mut textq: Query<&mut Text, With<PosText>>,
+    transform_q: Query<&Transform>,
+    mut text_q: Query<&mut Text, With<PosText>>,
 ) {
-    let mut text = textq.single_mut();
+    let mut text = text_q.single_mut();
+
     match entity_selected.get() {
         Some(joint) => {
-            let jq = jointq.get(joint);
-            if jq.is_err() {
-                // println!("UI: update_info | {:?}", jq); // not a problem
-                return;
-            }
-            let (ltransform, editable) = jq.unwrap();
-            if let Some(mode) = editable.mode.as_ref() {
-                 match mode {
-                    EditMode::Cursor => (),
-                    _ => {
-                        let dif = pos_cache.0 - ltransform.translation; // should store pos inside joint
-                        text.sections[0].value = format!(
-                            "dx: {:.3} | dy: {:.3} | dz: {:.3}  ({:.3})",
-                            dif.x,
-                            dif.y, 
-                            dif.z,
-                            dif.length(),
-                        );
-                        text.sections[1].value = "".to_string();
-                        text.sections[2].value = "".to_string();
-                        return;
-                    },
-                }
-            }
+            let transform = transform_q.get(joint).unwrap();
 
-            text.sections[0].value = format!(
+            **text = format!(
                 "X: {:.3} | Y: {:.3} | Z: {:.3}",
-                ltransform.translation.x, ltransform.translation.y, ltransform.translation.z
+                transform.translation.x, transform.translation.y, transform.translation.z
             );
         },
         None => {
-            text.sections[0].value = "".to_string();
-            text.sections[1].value = "".to_string();
-            text.sections[2].value = "".to_string();
+            **text = "".to_string();
         },
      }
 }

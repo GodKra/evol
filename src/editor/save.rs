@@ -1,20 +1,22 @@
 use bevy::prelude::*;
 
-use crate::pgraph::*;
+use crate::structure::Structure;
 
-/// System that saves the joint structure to a data file (currently ./points.ron)
-/// 
-/// *active
+#[derive(Event)]
+pub struct SaveEvent;
+
+/// System that saves the joint structure to a file.
 pub fn save(
-    mut pgraph: ResMut<PGraph>,
+    _: Trigger<SaveEvent>,
+    mut structure: ResMut<Structure>,
 ) {
-    for edge in pgraph.0.edge_weights_mut() {
+    for edge in structure.0.edge_weights_mut() {
         edge.muscle_data = edge.muscles.keys().copied().collect();
     }
     std::fs::write(
-        "./pgraph.ron", 
+        "./structure.ron", 
         ron::ser::to_string_pretty(
-            &pgraph.0, 
+            &structure.0, 
                 ron::ser::PrettyConfig::new()
                 .depth_limit(2)
                 .separate_tuple_members(true)
@@ -22,5 +24,5 @@ pub fn save(
         ).unwrap()
     ).unwrap();
 
-    println!("** SAVED");
+    info!(":: Saved to ./structure.ron");
 }

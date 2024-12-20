@@ -1,33 +1,28 @@
+use core::fmt;
 use bevy::prelude::*;
 use petgraph::stable_graph::{NodeIndex, EdgeIndex};
 
-use core::fmt;
-use std::hash::Hash;
 
 pub const JOINT_RADIUS: f32 = 1.0;
 
 pub enum Errors {
-    /// Errors caused when attempting to get current window. Usually for mouse cursor.
-    Window,
-    /// Errors caused when a component is missing. (Component, Entity)
+    /// Error: Component not found.
     ComponentMissing(&'static str, Entity),
-    /// Errors caused when an element is missing from the ID map. (ID, EntityID)
+    /// Error: NodeIndex not found in graph.
     NodeMissing(NodeIndex),
-    /// Errors caused when an element is missing from the ID map. (ID, EntityID)
+    /// Error: EdgeIndex not found in graph.
     EdgeMissing(EdgeIndex),
 }
 
 impl fmt::Display for Errors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Errors::Window => 
-                write!(f, "(Window): Window not found"),
             Errors::ComponentMissing(component, entity) => 
                 write!(f, "(ComponentMissing): Component {:?} not found for entity {:?}", component, entity),
             Errors::NodeMissing(node) => 
-                write!(f, "(NodeMissing): Node {:?} does not exist in point graph", node),
+                write!(f, "(NodeMissing): Node {:?} not found in graph", node),
             Errors::EdgeMissing(edge) => 
-                write!(f, "(EdgeMissing): Edge {:?} does not exist in point graph", edge),
+                write!(f, "(EdgeMissing): Edge {:?} not found in graph", edge),
         }
     }
 }
@@ -48,16 +43,16 @@ impl FromWorld for JointMaterial {
     fn from_world(world: &mut World) -> Self {
         let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
         JointMaterial {
-            joint_color: materials.add(Color::rgb(0.0, 0.0, 0.0,).into()),
+            joint_color: materials.add(Color::srgb(0.0, 0.0, 0.0,)),
             connector_color: materials.add(
                 StandardMaterial {
-                    base_color: Color::rgb(0.8, 0.8, 0.8,),
-                    emissive: Color::rgba_linear(0.6, 0.6, 0.6, 0.0),
+                    base_color: Color::srgb(0.8, 0.8, 0.8,),
+                    unlit: true,
                     ..default()
                 }
             ),
             muscle_color: materials.add(StandardMaterial {
-                base_color: Color::rgb(1.0, 0.0, 0.0),
+                base_color: Color::srgb(1.0, 0.0, 0.0),
                 unlit: true,
                 ..Default::default()
             }),
@@ -76,84 +71,20 @@ impl FromWorld for JointMeshes {
     fn from_world(world: &mut World) -> Self {
         let mut meshes = world.resource_mut::<Assets<Mesh>>();
         JointMeshes {
-            head: meshes.add(Mesh::try_from(shape::Icosphere {
+            head: meshes.add(Sphere {
                 radius: JOINT_RADIUS,
-                subdivisions: 32,
-            }).unwrap()),
-            connector: meshes.add(Mesh::from(shape::Capsule {
-                depth: 1.5,
+            }),
+            connector: meshes.add(Capsule3d {
+                half_length: 0.75,
                 radius: 0.25,
                 ..Default::default()
-            })),
-            muscle: meshes.add(Mesh::from(shape::Cube {
-                size: 0.2,
-            })),
+            }),
+            muscle: meshes.add(Cuboid {
+                half_size: Vec3::new(0.1, 0.1, 0.1),
+            }),
         }
     }
 }
-
-pub trait Control
-{
-    type I: 'static + Hash + Eq + Sync + Send + Copy;
-
-    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool;
-}
-
-pub enum KeyControls {
-    ESAVE,
-    EDELETE,
-    // EROTATE,
-    // EGRAB,
-    // EEXTRUDE,
-    // ESWITCH_MODE,
-    // NONE,
-}
-
-impl KeyControls {
-    pub fn code(&self) -> KeyCode {
-        match self {
-            Self::ESAVE => KeyCode::S,
-            Self::EDELETE => KeyCode::Delete,
-            // Self::EROTATE => KeyCode::R,
-            // Self::EGRAB => KeyCode::G,
-            // Self::EEXTRUDE => KeyCode::E,
-            // Self::ESWITCH_MODE => KeyCode::Tab,
-        }
-    }
-}
-
-impl Control for KeyControls {
-    type I = KeyCode;
-    fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
-        kbd.just_pressed(self.code())
-    }
-}
-
-// pub fn pressed_key<T: KeyCode> (
-//     input: Res<Input<KeyCode>>,
-// ) -> bool {
-
-// }
-
-// pub enum MouseControls {
-//     EINTERACT,
-// }
-
-// impl MouseControls {
-//     pub fn to_code(&self) -> MouseButton {
-//         match self {
-//             Self::EINTERACT => MouseButton::Left,
-//         }
-//     }
-// }
-
-
-// impl Control for MouseControls {
-//     type I = MouseButton;
-//     fn pressed(&self, kbd: Res<Input<Self::I>>) -> bool {
-//         kbd.just_pressed(self.to_code())
-//     }
-// }
 
 /// Despawn all entities and their children with a given component type
 pub fn despawn_all<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
@@ -163,8 +94,8 @@ pub fn despawn_all<T: Component>(mut commands: Commands, q: Query<Entity, With<T
 }
 
 /// Gets the the point of intersection between a plane and ray. Both plane and ray should be in the same coordinate space.
-pub fn get_intersect_plane_ray(plane_pos: Vec3, plane_normal: Vec3, ray: Ray) -> Vec3 {
-    ray.origin + ((plane_pos - ray.origin).dot(plane_normal))/(ray.direction.dot(plane_normal)) * ray.direction
+pub fn get_intersect_plane_ray(plane_pos: Vec3, plane_normal: Vec3, ray: Ray3d) -> Vec3 {
+    ray.origin + ((plane_pos - ray.origin).dot(plane_normal))/(ray.direction.dot(plane_normal)) * Vec3::from(ray.direction)
 }
 
 /// Returns the quaternion needed for `src` to rotate around the `axis` to reach `dest`.

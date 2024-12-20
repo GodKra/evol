@@ -1,32 +1,27 @@
+use bevy::picking::prelude::*;
 use bevy::prelude::*;
-use bevy_mod_picking::prelude::*;
-// use iyes_loopless::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::util::JointMaterial;
 
-use crate::pgraph::*;
+use crate::structure::*;
 
 pub struct SelectionPlugin;
 impl Plugin for SelectionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EntitySelected>()
-            .init_resource::<SelectionUpdated>()
             .init_resource::<HighlightMaterials>()
+            .add_event::<SelectionUpdateEvent>()
+            .add_event::<SelectionBlockEvent>()
 
-            .add_systems(
-                PostUpdate,
-                (
-                    joint_select,
-                    (
-                        update_selection_type,
-                        highlight_selection
-                    ).chain(),
-                )
-            );
+            .add_systems(Update, select_on_click)
+
+            .add_systems(PostUpdate, highlight_selection)
+            
+            .add_observer(update_selectables);
     }
 }
 
-// Colors
 #[derive(Resource)]
 pub struct HighlightMaterials {
     pub joint_color: Handle<StandardMaterial>,
@@ -40,22 +35,25 @@ impl FromWorld for HighlightMaterials {
         HighlightMaterials {
             joint_color: materials.add(
                 StandardMaterial {
-                    base_color: Color::rgb(1., 0.858, 0.301),
-                    emissive: Color::rgba_linear(0.521, 0.415, 0.0, 0.0),
+                    base_color: Color::srgb(1., 0.858, 0.301),
+                    emissive: Color::linear_rgba(0.521, 0.415, 0.0, 0.0).into(),
+                    unlit: true,
                     ..default()
                 }
             ),
             connector_color: materials.add(
                 StandardMaterial {
-                    base_color: Color::rgb(1.0, 0.29, 0.1),
-                    emissive: Color::rgba_linear(1.0, 0.29, 0.06, 0.0),
+                    base_color: Color::srgb(1.0, 0.29, 0.1),
+                    emissive: Color::linear_rgba(1.0, 0.29, 0.06, 0.0).into(),
+                    unlit: true,
                     ..default()
                 }
             ),
             muscle_color: materials.add(
                 StandardMaterial {
-                    base_color: Color::rgb(1.0, 0.29, 0.1),
-                    emissive: Color::rgba_linear(0.0, 1.0, 0.0, 1.0),
+                    base_color: Color::srgb(1.0, 0.29, 0.1),
+                    emissive: Color::linear_rgba(0.0, 1.0, 0.0, 1.0).into(),
+                    unlit: true,
                     ..default()
                 }
             ),
@@ -71,30 +69,22 @@ pub enum SelectableEntity {
     Muscle(Entity),
 }
 
-#[derive(Debug)]
-pub enum SelectionMode {
-    Joint,
-    Connector,
-    Muscle,
-}
-
-/// Describes selection type. None = not selected.
 #[derive(Component)]
 pub struct Selectable {
     pub entity_type: SelectableEntity,
-    pub select_mode: Option<SelectionMode>,
+    pub selected: bool,
 }
 
 impl Selectable {
     pub fn with_type(entity_type: SelectableEntity) -> Self {
         Selectable {
             entity_type,
-            select_mode: None,
+            selected: false,
         }
     }
 }
 
-/// Currently selected Entity. If SelectionUpdated is true then the entity set will be highlighted.
+/// Currently selected Entity. Will be highlighted when SelectionUpdateEvent is triggered.
 #[derive(Default, Resource)]
 pub struct EntitySelected(pub Option<SelectableEntity>);
 
@@ -130,145 +120,143 @@ impl EntitySelected {
         None
     }
     pub fn is_joint(&self) -> bool {
-        if let Some(SelectableEntity::Joint(_)) = &self.0 {
-            return true
-        }
-        false
+        matches!(self.0, Some(SelectableEntity::Joint(_)))
+        // if let Some(SelectableEntity::Joint(_)) = &self.0 {
+        //     return true
+        // }
+        // false
     }
     pub fn is_connector(&self) -> bool {
-        if let Some(SelectableEntity::Connector(_)) = &self.0 {
-            return true
-        }
-        false
+        matches!(self.0, Some(SelectableEntity::Connector(_)))
+        // if let Some(SelectableEntity::Connector(_)) = &self.0 {
+        //     return true
+        // }
+        // false
     }
     pub fn is_muscle(&self) -> bool {
-        if let Some(SelectableEntity::Muscle(_)) = &self.0 {
-            return true
-        }
-        false
+        matches!(self.0, Some(SelectableEntity::Muscle(_)))
+        // if let Some(SelectableEntity::Muscle(_)) = &self.0 {
+        //     return true
+        // }
+        // false
     }
 }
 
-/// Set to true if any changes are to be made to the selection
-#[derive(Default, Resource)]
-pub struct SelectionUpdated(pub bool);
+#[derive(Event)]
+pub struct SelectionUpdateEvent;
 
-/// System to set the joint_selected resource when mouse clicked
-/// 
-/// *active
-pub fn joint_select(
+#[derive(Event)]
+pub struct SelectionBlockEvent;
+
+fn select_on_click(
+    mut commands: Commands,
+    mut ray_cast: MeshRayCast,
+    mouse: Res<ButtonInput<MouseButton>>,
+    cam_q: Query<(&Camera, &GlobalTransform)>,
+    window_q: Query<&Window, With<PrimaryWindow>>,
     mut entity_selected: ResMut<EntitySelected>,
-    mut selection_updated: ResMut<SelectionUpdated>,
     selectable_q: Query<&Selectable>,
-    select_q: Query<(Entity, &PickSelection), Changed<PickSelection>>,
-    pointer_q: Query<&PointerInteraction>,
+    mut ev_block: EventReader<SelectionBlockEvent>
 ) {
-    for (target, select_state) in select_q.iter() {
-        let pointer = pointer_q.single();
-        if select_state.is_selected {
-            if entity_selected.contains(target) || selection_updated.0 {
-                return;
-            }
+    if !mouse.just_pressed(MouseButton::Left) {
+        return
+    }
 
-            let selectable = selectable_q.get(target).unwrap();
-            entity_selected.set(Some(selectable.entity_type.clone()));
-            selection_updated.0 = true;
-            
-            println!(":: Selected: {:?}", entity_selected.0);
-        } else if pointer.get_nearest_hit().is_none() {
-            selection_updated.0 = true;
-            entity_selected.set(None);
-            println!(":: Selected: {:?}", entity_selected.0);
+    let (cam, cam_transform) = cam_q.single();
+    let Some(mouse_pos) = window_q.single().cursor_position() else {
+        return
+    };
+    let ray = cam.viewport_to_world(cam_transform, mouse_pos).unwrap();
+
+    if let Some((target, _)) = ray_cast.cast_ray(ray, &RayCastSettings::default()).first() {
+        if entity_selected.contains(*target) || ev_block.read().count() > 0 {
+            return;
         }
+
+        if let Ok(selectable) = selectable_q.get(*target) {
+            entity_selected.set(Some(selectable.entity_type.clone()));
+            commands.trigger(SelectionUpdateEvent);
+            return;
+        }
+    }
+
+    // If this is reached, means something other than a Selectable entity has been clicked. In other words, deselect.
+    if entity_selected.is_some() {
+        entity_selected.set(None);
+        commands.trigger(SelectionUpdateEvent);
     }
 }
 
-/// System to update the current joint_selected and its children's Selectable component.
-/// 
-/// *passive
-fn update_selection_type(
-    pgraph: Res<PGraph>,
+/// System to update the Selectable components of each entity on selection updates. Triggers with SelectionUpdateEvent
+fn update_selectables(
+    _: Trigger<SelectionUpdateEvent>,
+    structure: Res<Structure>,
     entity_selected: Res<EntitySelected>,
-    selection_updated: Res<SelectionUpdated>,
     mut selectable_query: Query<&mut Selectable>,
     joint_q: Query<&Joint>,
 ) {
-    if !selection_updated.0 {
-        return;
-    }
-    
+    info!(":: SELECTED: {:?}", entity_selected.0);
+
     for mut selectable in selectable_query.iter_mut() {
-        selectable.select_mode = None;
+        selectable.selected = false;
     }
+
     if !entity_selected.is_some() {
         return;
     }
 
-    match entity_selected.0.as_ref().unwrap() { // determines the behaviour of the highlight system.
-        SelectableEntity::Joint(joint) => {
-            let mut selectable = selectable_query.get_mut(*joint).unwrap();
-            selectable.select_mode = Some(SelectionMode::Joint);
-            
-            select_parent_edge(*joint, &pgraph, &mut selectable_query, &joint_q);
-        },
-        SelectableEntity::Connector(conn) => {
-            let mut selectable = selectable_query.get_mut(*conn).unwrap();
-            selectable.select_mode = Some(SelectionMode::Connector);
-        },
-        SelectableEntity::Muscle(muscle) => {
-            let mut selectable = selectable_query.get_mut(*muscle).unwrap();
-            selectable.select_mode = Some(SelectionMode::Muscle);
-        },
+    let entity = entity_selected.get().unwrap();
+    let mut selectable = selectable_query.get_mut(entity).unwrap();
+    selectable.selected = true;
+
+    if entity_selected.is_joint() {
+        update_parent_edge(entity, &structure, &mut selectable_query, &joint_q, true);
     }
 }
 
-/// System to update entity highlight based on its select_mode. Runs over every selectable entity everytime
-/// selection is updated. (maybe improvable? TODO)
-/// 
-/// passive
+/// System to change the material of selected entities (via the Selectable component).
 fn highlight_selection(
-    mut selection_updated: ResMut<SelectionUpdated>,
     select_materials: Res<HighlightMaterials>,
     joint_materials: Res<JointMaterial>,
-    mut s_query: Query<(&mut Handle<StandardMaterial>, &Selectable)>,
+    mut selectable_q: Query<(&mut MeshMaterial3d<StandardMaterial>, &Selectable), Changed<Selectable>>,
 ) {
-    if selection_updated.0 {
-        for (mut material_handle, selectable) in s_query.iter_mut() {
-            if let Some(select_type) = &selectable.select_mode {
-                match select_type { // Highlight selected
-                    SelectionMode::Joint => *material_handle = select_materials.joint_color.clone(),
-                    // SelectionMode::JointChild => *material_handle = select_materials.child_color.clone(),
-                    SelectionMode::Connector => *material_handle = select_materials.connector_color.clone(),
-                    SelectionMode::Muscle => *material_handle = select_materials.muscle_color.clone(),
-                }
-            } else {
-                match selectable.entity_type { // Reset highlight for those not selected
-                    SelectableEntity::Joint(_) => *material_handle = joint_materials.joint_color.clone(),
-                    SelectableEntity::Connector(_) => *material_handle = joint_materials.connector_color.clone(),
-                    SelectableEntity::Muscle(_) => *material_handle = joint_materials.muscle_color.clone(),
-                }
+    for (mut material_handle, selectable) in selectable_q.iter_mut() {
+        if selectable.selected {
+            match selectable.entity_type {
+                SelectableEntity::Joint(_) => *material_handle = MeshMaterial3d(select_materials.joint_color.clone()),
+                SelectableEntity::Connector(_) => *material_handle = MeshMaterial3d(select_materials.connector_color.clone()),
+                SelectableEntity::Muscle(_) => *material_handle = MeshMaterial3d(select_materials.muscle_color.clone()),
+            }
+        } else {
+            match selectable.entity_type {
+                SelectableEntity::Joint(_) => *material_handle = MeshMaterial3d(joint_materials.joint_color.clone()),
+                SelectableEntity::Connector(_) => *material_handle = MeshMaterial3d(joint_materials.connector_color.clone()),
+                SelectableEntity::Muscle(_) => *material_handle = MeshMaterial3d(joint_materials.muscle_color.clone())
             }
         }
-        selection_updated.0 = false;
     }
 }
 
-fn select_parent_edge(
-    joint: Entity,
-    pgraph: &Res<PGraph>,
-    selectable_query: &mut Query<&mut Selectable>,
+// Changes the selected status of the connecting edge to the parent joint.
+fn update_parent_edge(
+    entity: Entity,
+    structure: &Res<Structure>,
+    selectable_q: &mut Query<&mut Selectable>,
     joint_q: &Query<&Joint>,
+    selected: bool,
 ) {
-    let joint_data = joint_q.get(joint).unwrap();
-            
-    let pdata = pgraph.0.node_weight(joint_data.node_index).unwrap();
+    let Ok(joint_data) = joint_q.get(entity) else {
+        return
+    };
+
+    let pdata = structure.node_weight(joint_data.node_index).unwrap();
     if let Some(parent) = pdata.parent {
-        let Some(edge) = pgraph.0.find_edge(joint_data.node_index, parent) else {
-            println!("edge missing between parent and joint");
+        let Some(edge) = structure.find_edge(joint_data.node_index, parent) else {
+            warn!("Edge missing between node {:?} and parent {:?}", joint_data.node_index, parent);
             return;
         };
-        let conn = pgraph.edge_to_entity(edge).unwrap();
-        let mut selectable = selectable_query.get_mut(conn).unwrap();
-        selectable.select_mode = Some(SelectionMode::Connector);
+        let conn = structure.edge_to_entity(edge).unwrap();
+        let mut selectable: Mut<'_, Selectable> = selectable_q.get_mut(conn).unwrap();
+        selectable.selected = selected;
     }
 }

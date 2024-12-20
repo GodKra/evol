@@ -1,16 +1,13 @@
+use std::ops::{Deref, DerefMut};
 
 use bevy::{prelude::*, utils::HashMap};
-use bevy_mod_picking::prelude::*;
+
 use serde::{Serialize, Deserialize};
 use petgraph::{graph::*, stable_graph::StableUnGraph};
 
-use crate::selection::*;
-use crate::util::{JointMaterial, JointMeshes, Errors};
+use crate::{selection::{Selectable, SelectableEntity}, util::{Errors, JointMaterial, JointMeshes}};
 
-/// Graph describing the joints, connections and muscles.
-pub type PointGraph = StableUnGraph<Point, Connection>;
-
-/// Node of point graph.
+/// Node of body graph. These are joints. `entityid` is the bevy-given EntityID, `pos` is the 3D position vector, and parent is the parent node.
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct Point {
     #[serde(skip)]
@@ -19,7 +16,7 @@ pub struct Point {
     pub parent: Option<NodeIndex>,
 }
 
-/// Edge of point graph.
+/// Edge of structure graph. These are connectors. `entityid` is the bevy-given EntityID, `muscles` maps UNKNOWN
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct Connection {
     #[serde(skip)]
@@ -42,19 +39,33 @@ pub struct Connector {
     pub edge_index: EdgeIndex,
 }
 
-/// Component to each muscle describing its anchors.
+/// Component to each muscle describing its anchors (edges/connectors).
 #[derive(Component, Default, Debug)]
 pub struct Muscle {
     pub anchor1: Option<EdgeIndex>,
     pub anchor2: Option<EdgeIndex>,
 }
 
-/// PointGraph struct stored as resource.
+/// Graph resource describing the joints (nodes), connections (edges) and muscles (in the edge weights).
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Resource)]
-pub struct PGraph(pub PointGraph);
+pub struct Structure(pub StableUnGraph<Point, Connection>);
 
-impl PGraph {
-    /// Spawns all the joints, connectors and muscles contained in the point graph where `#_components` are extra
+impl Deref for Structure {
+    type Target = StableUnGraph<Point, Connection>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0    
+    }
+}
+
+impl DerefMut for Structure {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Structure {
+    /// Spawns all the joints, connectors and muscles contained in the structure graph where `#_components` are extra
     /// components that may be desired to be added to the entities when deserializing the graph, and `state` is the game 
     /// state where the object exists.
     pub fn create<J, M, C, S>(
@@ -67,16 +78,16 @@ impl PGraph {
         muscle_components: M,
         state: S,
     ) where 
-        J: Bundle + Clone, // joint
-        M: Bundle + Clone, // muscle
-        C: Bundle + Clone, // connector
-        S: Bundle + Copy
+        J: Bundle + Clone, // joint components
+        M: Bundle + Clone, // muscle components
+        C: Bundle + Clone, // connector components
+        S: Bundle + Copy // game state
     {
-        let nodes: Vec<NodeIndex> = self.0.node_indices().collect(); // have to do this because borrowchecker
+        let nodes: Vec<NodeIndex> = self.node_indices().collect(); // have to do this because borrowchecker
         let mut muscles_complete: HashMap<EdgeIndex, HashMap<EdgeIndex, Entity>> = HashMap::new();
 
         for node in nodes {
-            let point_data = self.0.node_weight_mut(node).unwrap();
+            let point_data = self.node_weight_mut(node).unwrap();
 
             let joint = Joint { node_index: node};
 
@@ -93,14 +104,14 @@ impl PGraph {
             point_data.entityid = Some(e);
         }
 
-        let edges: Vec<EdgeIndex> = self.0.edge_indices().collect();
+        let edges: Vec<EdgeIndex> = self.edge_indices().collect();
 
         for edge in edges {
-            let (n1, n2) = self.0.edge_endpoints(edge).unwrap();
-            let pos1 = self.0.node_weight(n1).unwrap().pos;
-            let pos2 = self.0.node_weight(n2).unwrap().pos;
+            let (n1, n2) = self.edge_endpoints(edge).unwrap();
+            let pos1 = self.node_weight(n1).unwrap().pos;
+            let pos2 = self.node_weight(n2).unwrap().pos;
 
-            let edge_data = self.0.edge_weight_mut(edge).unwrap();
+            let edge_data = self.edge_weight_mut(edge).unwrap();
             let connector = Connector { edge_index: edge };
 
             let e = create_connector(
@@ -138,24 +149,24 @@ impl PGraph {
 
     /// Converts a given node index to its respective entity id if it exists.
     pub fn node_to_entity(&self, node: NodeIndex) -> Option<Entity> {
-        let Some(pdata) = self.0.node_weight(node) else {
-            println!("{}", Errors::NodeMissing(node));
+        let Some(pdata) = self.node_weight(node) else {
+            warn!("{}", Errors::NodeMissing(node));
             return None;
         };
         pdata.entityid
     }
     /// Converts a given edge index to its respective entity id if it exists.
     pub fn edge_to_entity(&self, edge: EdgeIndex) -> Option<Entity> {
-        let Some(pdata) = self.0.edge_weight(edge) else {
-            println!("{}", Errors::EdgeMissing(edge));
+        let Some(pdata) = self.edge_weight(edge) else {
+            warn!("{}", Errors::EdgeMissing(edge));
             return None;
         };
         pdata.entityid
     }
     /// Returns the node index of a given node's parent if it exists.
     pub fn node_parent(&self, node: NodeIndex) -> Option<NodeIndex> {
-        let Some(pdata) = self.0.node_weight(node) else {
-            println!("{}", Errors::NodeMissing(node));
+        let Some(pdata) = self.node_weight(node) else {
+            warn!("{}", Errors::NodeMissing(node));
             return None;
         };
         pdata.parent
@@ -183,23 +194,18 @@ pub fn create_joint<J: Bundle, S: Bundle>(
 ) -> Entity {
     let e = commands.spawn(
         (
-            PbrBundle {
-                mesh: meshes.head.clone(),
-                material: materials.joint_color.clone(),
-                transform: Transform::from_translation(pos),
-                ..Default::default()
-            },
+            Mesh3d(meshes.head.clone()),
+            MeshMaterial3d(materials.joint_color.clone()),
+            Transform::from_translation(pos),
             components,
             state,
-            
-            PickableBundle::default(),
-            RaycastPickTarget::default(),
         )
     ).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Joint(e)));
     if let Some(joint) = joint_data {
         commands.entity(e).insert(joint);
     }
+    info!(":: Created Joint: {:?}", e);
     e
 }
 
@@ -227,22 +233,19 @@ pub fn create_connector<C: Bundle, S: Bundle>(
     let position = Mat4::from_scale_rotation_translation(scale, Quat::default(), translation);
 
     let e = commands.spawn((
-        PbrBundle {
-            mesh: meshes.connector.clone(),
-            material: materials.connector_color.clone(),
-            transform: Transform::from_matrix(rotate * position),
-            ..Default::default()
-        },
+        Mesh3d(meshes.connector.clone()),
+        MeshMaterial3d(materials.connector_color.clone()),
+        Transform::from_matrix(rotate * position),
         components,
         state,
         
-        PickableBundle::default(),
-        RaycastPickTarget::default(),
+        // RaycastPickTarget::default(),
     )).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Connector(e)));
     if let Some(conn) = connector_data {
         commands.entity(e).insert(conn);
     }
+    info!(":: Created Connector: {:?}", e);
     e
 }
 
@@ -258,18 +261,14 @@ pub fn create_muscle<M: Bundle, S: Bundle> (
     state: S,
 ) -> Entity{
     let e = commands.spawn((
-        PbrBundle {
-            mesh: meshes.connector.clone(),
-            material: materials.muscle_color.clone(),
-            ..Default::default()
-        },
+        Mesh3d(meshes.connector.clone()),
+        MeshMaterial3d(materials.muscle_color.clone()),
         Muscle { anchor1, anchor2 },
         components,
         state,
         
-        PickableBundle::default(),
-        RaycastPickTarget::default(),
     )).id();
     commands.entity(e).insert(Selectable::with_type(SelectableEntity::Muscle(e)));
+    info!(":: Created Muscle: {:?}", e);
     e
 }

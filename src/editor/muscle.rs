@@ -1,96 +1,73 @@
-
 use bevy::prelude::*;
-use petgraph::stable_graph::EdgeIndex;
 
-use crate::{util::{JointMaterial, JointMeshes}, selection::EntitySelected};
+use crate::{
+    editor::controls::ActionEvent, 
+    selection::EntitySelected, 
+    structure::*, 
+    util::{JointMaterial, JointMeshes}
+};
 
-use super::IsMuscleMode;
-use crate::pgraph::*;
+use super::controls::EditMode;
 
-/// (Joint, Muscle); describes the first anchor when creating a muscle.
-#[derive(Default, Resource)]
-pub struct MuscleRoot(Option<(EdgeIndex, Entity)>);
+#[derive(Event)]
+pub struct MuscleAddEvent;
 
-/// Marker for Entity used to give an anchor (cursor's projected position) to muscles which does not have a second anchor
-/// **TODO: muscles should follow the cursor when anchor is set to this**
-#[derive(Component)]
-pub struct CursorAnchor;
-
-/// Creates muscles between two connectors with proper anchors. Muscle creation mode is initiated with M button.
+/// Creates muscles between two connectors.
 pub fn muscle_construct(
-    mut pgraph: ResMut<PGraph>,
+    mut structure: ResMut<Structure>,
     mut commands: Commands,
+    edit_mode: Res<EditMode>,
+    entity_selected: Res<EntitySelected>,
     meshes: Res<JointMeshes>,
     materials: Res<JointMaterial>,
-    mut is_muscle_mode: ResMut<IsMuscleMode>,
-    key_input: Res<Input<KeyCode>>,
-    // mouse_input: Res<Input<MouseButton>>,
-    entity_selected: Res<EntitySelected>,
-    mut muscle_root: ResMut<MuscleRoot>,
-    // added_pick_cam: Query<&PickingCamera, Added<PickingCamera>>,
+    mut ev_add: EventReader<MuscleAddEvent>,
     connector_q: Query<&Connector>,
-    // anchor_q: Query<&CursorAnchor>,
-    mut muscle_q: Query<&mut Muscle>,
 ) {
-    // for _ in added_pick_cam.iter() { // runs only once when initializing.
-    //     let anchor = commands.spawn((TransformBundle::default(), CursorAnchor)).id();
-    // }
-
-    if !is_muscle_mode.0 && entity_selected.is_connector() && key_input.just_pressed(KeyCode::M) { // First anchor is set
-        is_muscle_mode.0 = true;
+    let EditMode::MuscleAdd(entity) = *edit_mode else {
         return;
-    }
-    if !is_muscle_mode.0 || !entity_selected.is_connector() { // Entity selected is not a muscle anchor so reset
-        if is_muscle_mode.0 {
-            is_muscle_mode.0 = false;
-            if let Some((_, muscle)) = muscle_root.0 {
-                commands.entity(muscle).despawn();
-            }
-            muscle_root.0 = None;
-        }
+    };
+
+    if ev_add.is_empty() {
         return;
     }
 
-    let connector = connector_q.get(entity_selected.get().unwrap()).unwrap(); // both unwraps are certain to work with earlier checks
-    
-    if muscle_root.0.is_none() { // No anchor set yet\
-        let muscle = create_muscle(&mut commands, &meshes, &materials, Some(connector.edge_index), None, (), crate::Editor);
-        muscle_root.0 = Some((connector.edge_index, muscle));
-    } else {
-        if muscle_root.0.unwrap().0 == connector.edge_index { // Root joint is selected again as second anchor
-            return;
-        }
+    ev_add.clear();
 
-        let (anchor1, muscle) = muscle_root.0.unwrap();
-        let anchor2 = connector.edge_index;
-        let mut muscles = muscle_q.get_mut(muscle).unwrap();
-        
-        muscles.anchor2 = Some(connector.edge_index);
+    let connector1 = connector_q.get(entity).unwrap();
+    let connector2 = connector_q.get(entity_selected.get().unwrap()).unwrap();
 
-        // Anchor1
-        let anchor1_data = pgraph.0.edge_weight_mut(anchor1).unwrap();
-        if anchor1_data.muscles.contains_key(&anchor2) {
-            println!(":: Muscle already exists");
-            is_muscle_mode.0 = false;
-            commands.entity(muscle).despawn();
-            muscle_root.0 = None;
-            return;
-        }
-        anchor1_data.muscles.insert(anchor2, muscle);
+    let anchor1 = connector1.edge_index;
+    let anchor2 = connector2.edge_index;
 
-        // Anchor2
-        let anchor2_data = pgraph.0.edge_weight_mut(anchor2).unwrap();
-        anchor2_data.muscles.insert(anchor1, muscle);
+    let anchor1_data = structure.edge_weight_mut(anchor1).unwrap();
 
-        is_muscle_mode.0 = false;
-        muscle_root.0 = None;
-        println!(":: Muscle Constructed: {:?} <> {:?}", anchor1, anchor2);
+    if anchor1_data.muscles.contains_key(&anchor2) {
+        info!(":: Muscle already exists between edge {:?} and {:?}", anchor1, anchor2);
+        commands.send_event(ActionEvent::Cancel);
+        return;
     }
+
+    let muscle = create_muscle(
+        &mut commands, 
+        &meshes, 
+        &materials, 
+        Some(anchor1), 
+        Some(anchor2), 
+        (), 
+        crate::Editor
+    );
+
+    anchor1_data.muscles.insert(anchor2, muscle);
+
+    let anchor2_data = structure.edge_weight_mut(anchor2).unwrap();
+    anchor2_data.muscles.insert(anchor1, muscle);
+
+    info!(":: Muscle Constructed: {:?} <> {:?}", anchor1, anchor2);
 }
 
 /// Updates the transform of the muscles when they have been created or the anchors have been moved.
 pub fn update_muscles(
-    pgraph: Res<PGraph>,
+    structure: Res<Structure>,
     mut muscle_set: ParamSet<(
         Query<(&Muscle, &mut Transform), (Changed<Muscle>, Without<Joint>)>,
         Query<(&Muscle, &mut Transform), (With<Muscle>, Without<Joint>)>,
@@ -99,14 +76,14 @@ pub fn update_muscles(
     transform_q: Query<&Transform, (Without<Muscle>, Without<Joint>)>,
 ) {
     for joint in changed_joints.iter() {
-        let edges = pgraph.0.edges(joint.node_index);
+        let edges = structure.edges(joint.node_index);
         for edge in edges {
             let e_weight = edge.weight();
             for (_, muscle) in e_weight.muscles.iter() {
                 let mut query = muscle_set.p1();
                 let (m_data, mut m_transform) = query.get_mut(*muscle).unwrap();
-                let c1 = pgraph.edge_to_entity(m_data.anchor1.unwrap()).unwrap();
-                let c2 = pgraph.edge_to_entity(m_data.anchor2.unwrap()).unwrap();
+                let c1 = structure.edge_to_entity(m_data.anchor1.unwrap()).unwrap();
+                let c2 = structure.edge_to_entity(m_data.anchor2.unwrap()).unwrap();
 
                 *m_transform = get_muscle_transform(&transform_q, c1, c2,);
             }
@@ -118,14 +95,14 @@ pub fn update_muscles(
             return
         }
 
-        let c1 = pgraph.edge_to_entity(muscle.anchor1.unwrap()).unwrap();
-        let c2 = pgraph.edge_to_entity(muscle.anchor2.unwrap()).unwrap();
+        let c1 = structure.edge_to_entity(muscle.anchor1.unwrap()).unwrap();
+        let c2 = structure.edge_to_entity(muscle.anchor2.unwrap()).unwrap();
 
         *m_transform = get_muscle_transform(&transform_q, c1, c2,);
     }
 }
 
-/// Returns the muscle transform given the two anchor joints.
+/// Returns the muscle transform given the two anchor connectors.
 fn get_muscle_transform(
     transform_q: &Query<&Transform, (Without<Muscle>, Without<Joint>)>,
     connector1: Entity,
